@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { Check, CircleAlert, CircleCheck, ImagePlus, Loader2, MapPin, RotateCcw, Send, Upload } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, ImagePlus, Loader2, MapPin, RotateCcw, Send, Upload, ZoomOut } from 'lucide-react';
 import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, type ModelState } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
 import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
-import { guideWall, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
+import { guideWall, spaceLimitedOnly, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
 import { WALL_CRITERIA, WALL_MESSAGES, WALL_SEQUENCE, type SceneClass, type WallMode } from '../lib/wall/criteria';
 import { analyzeWallPhoto, decide, spotFromTap, type WallAnalysis } from '../lib/wall/locate';
 import type { useCamera } from '../lib/useCamera';
@@ -139,12 +139,23 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
     if (moves[e.key]) { e.preventDefault(); setCursor(c => ({ x: Math.min(1, Math.max(0, c.x + moves[e.key][0])), y: Math.min(1, Math.max(0, c.y + moves[e.key][1])) })); }
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void pick(cursor.x, cursor.y); }
   }
+  /** The customer can't step back further: accept on the other checks and flag it for Base's team. */
+  function cantStepBack() {
+    if (!analysis) return;
+    const d = decide(analysis, spot, mode, true);
+    setDecision(d);
+    if (debug) setDebugInfo(i => ({ ...i, limitedSpace: true }));
+  }
   function retake() { run.current++; setAnalysis(null); setDecision(null); setSpot(null); setOwnedStill(null); setGuidance(null); setPhase('live'); }
   function use(override = false) {
     if (!still || !decision) return;
     const s = still; stillRef.current = null; setStill(null);
     const est = decision.estimate;
-    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(est && mode === 'wall' ? { details: `About ${Math.round(est.leftFt)} ft of wall visible left of the meter and ${Math.round(est.rightFt)} ft right (estimate)` } : {}) } });
+    const details = [
+      decision.limitedSpace ? 'Limited space — customer couldn’t step back further' : null,
+      est && mode === 'wall' ? `About ${Math.round(est.leftFt)} ft of wall visible left of the meter and ${Math.round(est.rightFt)} ft right (estimate)` : null,
+    ].filter(Boolean).join('. ');
+    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(decision.limitedSpace ? { limitedSpace: true } : {}), ...(details ? { details } : {}) } });
   }
 
   const tone = guidance?.tone ?? 'search';
@@ -170,6 +181,7 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
         <video ref={video} autoPlay playsInline muted onLoadedData={() => setVideoReady(true)} aria-label="Live camera preview" />
         <div className="wall-guide" aria-hidden="true"><i /><i /><i /><i /><span>Keep the ground in view</span></div>
         {mode !== 'wall' && <div className={`meter-zone ${mode}`} aria-hidden="true"><span>Meter here</span></div>}
+        {camera.canWiden && <button className="lens-toggle" aria-pressed={camera.wide} aria-label={camera.wide ? 'Switch back to the normal lens' : 'Switch to the wide lens to fit more in'} onClick={() => void camera.setWide(!camera.wide)}>{camera.wide ? '1×' : '0.5×'}</button>}
         <div className={`guide-message ${tone}`} role="status" aria-live="polite">{tone === 'ready' ? <CircleCheck size={17} /> : null}{guidance?.message ?? WALL_MESSAGES.loading}</div>
         <button className="shutter" aria-label="Take photo" disabled={!videoReady} onClick={capture}><span /></button>
       </> : <div className="camera-empty"><h3>{camera.status === 'requesting' ? 'Allow your camera to get started' : 'Turn on your camera'}</h3><p>{camera.status === 'unavailable' ? 'Your camera isn’t available. You can upload a photo instead.' : 'We’ll guide you to a photo Base can use.'}</p><button className="button" onClick={() => void camera.start()} disabled={camera.status === 'requesting'}>Use camera</button></div>}
@@ -206,8 +218,8 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
 
     {phase === 'result' && d && <div className={`meter-result ${d.accepted ? 'accepted' : 'rejected'}`}>
       <div className="meter-result-head">{d.accepted ? <CircleCheck size={26} /> : <CircleAlert size={26} />}<div>
-        <h3>{d.accepted ? 'Photo accepted' : 'Photo not accepted'}</h3>
-        <p>{d.accepted && mode !== 'wall' ? `The area to the ${mode} of your meter is in view.` : d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
+        <h3>{d.accepted ? (d.limitedSpace ? 'Photo accepted with a note' : 'Photo accepted') : 'Photo not accepted'}</h3>
+        <p>{d.accepted && d.limitedSpace ? 'We’ll let Base’s team know you couldn’t step back further. They’ll check the space from this photo and the side photos.' : d.accepted && mode !== 'wall' ? `The area to the ${mode} of your meter is in view.` : d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
       </div></div>
       <ul className="result-checks">{d.checks.filter(c => c.state !== 'skipped').map(c => <li key={c.id} className={c.state}>{c.state === 'pass' ? <Check size={15} /> : <CircleAlert size={15} />}<span><b>{c.label}</b>{c.state === 'fail' && c.message && c.message !== d.reasons[0] && <small>{c.message}</small>}</span></li>)}</ul>
       {still?.source === 'sample' && <p className="sample-disclaimer">Example from Base’s photo guide. This isn’t a photo of your home.</p>}
@@ -215,7 +227,11 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
         {d.accepted ? <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" onClick={() => use()}><Check size={17} /> Use this photo</button></>
           : <><button className="button" onClick={() => { setCursor(spot ? { x: spot.x, y: spot.y } : { x: 0.5, y: 0.5 }); setPhase('tap'); }}><MapPin size={16} /> Point to the meter again</button><button className="button primary" onClick={retake}><RotateCcw size={16} /> Retake photo</button></>}
       </div>
-      {!d.accepted && rejections >= WALL_CRITERIA.rejectionsBeforeOverride && <button className="text-button override-link" onClick={() => use(true)}><Send size={14} /> Still stuck? Send this photo anyway and Base’s team will review it.</button>}
+      {!d.accepted && spaceLimitedOnly(d) && <div className="space-limited">
+        {camera.canWiden && !camera.wide && <p><ZoomOut size={14} /> Tip: retake with the <b>0.5×</b> lens to fit more of the wall in.</p>}
+        <button className="button" onClick={cantStepBack}>I can’t step back any further</button>
+      </div>}
+      {!d.accepted && rejections >= WALL_CRITERIA.rejectionsBeforeOverride && !spaceLimitedOnly(d) && <button className="text-button override-link" onClick={() => use(true)}><Send size={14} /> Still stuck? Send this photo anyway and Base’s team will review it.</button>}
     </div>}
 
     {debug && <pre className="meter-debug">{JSON.stringify({ phase, models, ...debugInfo }, null, 1)}</pre>}

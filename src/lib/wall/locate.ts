@@ -59,5 +59,5 @@ export async function spotFromTap(a: WallAnalysis, x: number, y: number): Promis
   return { x, y, r, source: 'tap' };
 }
 
-export const decide = (a: WallAnalysis, meter: MeterSpot | null, mode: WallMode = 'wall'): WallDecision =>
-  decideWall({ scene: a.scene, meter, width: a.img.naturalWidth, height: a.img.naturalHeight, luma: a.luma, sharpness: a.sharpness }, mode);
+export const decide = (a: WallAnalysis, meter: MeterSpot | null, mode: WallMode = 'wall', limitedSpace = false): WallDecision =>
+  decideWall({ scene: a.scene, meter, width: a.img.naturalWidth, height: a.img.naturalHeight, luma: a.luma, sharpness: a.sharpness, limitedSpace }, mode);

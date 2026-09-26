@@ -65,3 +65,8 @@
 .meter-zone{position:absolute;top:8%;bottom:10%;width:30%;z-index:1;pointer-events:none;border:2px dashed #ffffffa0;border-radius:8px;display:flex;align-items:flex-start;justify-content:center}
 .meter-zone.right{left:3%}.meter-zone.left{right:3%}
 .meter-zone span{margin-top:44%;color:#fff;font-size:12px;background:#1f261fb0;padding:3px 8px;border-radius:10px}
+.lens-toggle{position:absolute;left:16px;bottom:22px;z-index:3;min-width:48px;height:48px;border-radius:24px;border:1px solid #ffffff80;background:#1f261fc0;color:#fff;font-weight:700;font-size:14px;cursor:pointer}
+.lens-toggle[aria-pressed="true"]{background:#fff;color:#1f261f}
+.space-limited{margin-top:12px;display:grid;gap:8px}
+.space-limited p{margin:0;font-size:13px;display:flex;align-items:center;gap:6px}
+.space-limited .button{width:100%}

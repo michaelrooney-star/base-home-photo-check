@@ -130,9 +130,9 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 | --- | --- | --- |
 | Outside wall of your home | CLIP scene "house wall" ≥ 0.5 (skipped if the classifier isn't available) | "This photo needs to be taken outside…" |
 | Meter in the photo | Customer confirmed or tapped the meter | "We need your electric meter in this photo…" |
-| Taken from far enough back | Meter cover diameter ≤ 12 % of photo height, and the scene isn't a meter close-up | "You're too close… step back at least 10 steps" |
+| Taken from far enough back | A stand-in for coverage. Passes if the meter cover, used as a ruler, shows ≥ 3 ft of wall each side and the ground. Otherwise it needs cover diameter ≤ 12 % of photo height and a scene that isn't a meter close-up | "You're too close… step back until the wall on both sides and the ground are in the photo" |
 | Wall visible on both sides | Meter centre ≥ 20 % from each side edge; if the size is known, ≥ 3 ft of wall each side | "Include more of the wall to the left/right…" |
-| Ground visible below the meter | If the size is known, ≥ 3.5 ft of photo below the meter centre; otherwise meter in the top 70 % | "Include the ground below the meter…" |
+| Ground visible below the meter | If the size is known, ≥ 2.5 ft of photo below the meter centre; otherwise meter in the top 70 % | "Include the ground below the meter…" |
 | Phone held sideways | Landscape photo | "Turn your phone sideways…" |
 | Enough light / In focus | Brightness ≥ 45/255; sharpness ≥ 15 (lenient: wide shots have no small text) | "It's too dark…" / "The photo is blurry…" |
 
@@ -142,6 +142,12 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 - the photo is accepted when the meter is found or tapped within 40 % of that edge ("Shows the area to the right of the meter"), with the same distance, ground, orientation, light and focus checks;
 - a meter on the opposite side gets "This shows the area to the LEFT of your meter. Turn to face the area on its right side." A meter near the middle gets "Turn a little more to the right…";
 - no feet estimate is made, because the wall recedes at an angle.
+
+**Tight spaces.** Many homeowners can't step back 10 steps (side yards, fences, narrow paths). The app handles this three ways:
+
+- **Coverage, not steps.** What Base needs is the wall around the meter and the ground, so a photo that measurably shows them passes however close it was taken.
+- **Wide lens.** Where the browser exposes a 0.5× lens, a **0.5×** button appears in the live view. It uses zoom below 1× where the camera supports it (some Android phones), or a back camera labelled ultra-wide (iPhone Safari). It's hidden when neither is available (`src/lib/lens.ts`).
+- **"I can't step back any further."** Shown when the only failures are distance or side coverage. The photo is accepted, with the note "Limited space — customer couldn't step back further" for Base's reviewers, and Review shows "Accepted · limited space noted". The meter, ground, light and focus checks still apply.
 
 **Distance estimates** use the meter's glass cover (about 7 in across on US socket meters) as a ruler. For example: "About 6 ft of wall shows left of the meter and 7 ft to the right." That's roughly ±30 %, so it's shown as an estimate and saved with the photo for Base's reviewers, and only a very short side (< 3 ft) is rejected.
 

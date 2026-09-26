@@ -1,7 +1,7 @@
 export type PhotoId = 'meter' | 'wall' | 'right' | 'left' | 'adjacent' | 'fence' | 'breaker' | 'rating';
 export type Answer = 'yes' | 'no' | 'unsure' | null;
 /** Result of the automatic meter-photo check. `override` = customer sent it anyway after rejections. */
-export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string };
+export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string; limitedSpace?: boolean };
 export type Photo = { url: string; source: 'camera' | 'upload' | 'sample'; status: 'confirmed' | 'retake'; warnings: string[]; check?: PhotoCheck };
 export type Photos = Partial<Record<PhotoId, Photo>>;
 export type PhotoStep = { id: PhotoId; title: string; instruction: string; tip: string; sample: string };

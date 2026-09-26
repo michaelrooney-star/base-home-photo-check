@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideWall, estimateFeet, guideWall, type SceneResult, type WallEvidence, type WallLive } from './assess';
+import { decideWall, estimateFeet, guideWall, spaceLimitedOnly, type SceneResult, type WallEvidence, type WallLive } from './assess';
 import { WALL_MESSAGES as M } from './criteria';
 
 const wall: SceneResult = { status: 'ok', top: 'house_wall', probs: { house_wall: 0.85, meter_closeup: 0.05, indoors: 0.05, other: 0.05 } };
@@ -23,7 +23,36 @@ describe('decideWall', () => {
   it('rejects a close-up: meter too big in frame', () => { expect(failed({ ...good, meter: { ...good.meter!, r: 0.2 } })).toContain('distance'); });
   it('uses the scene classifier for distance too', () => {
     expect(failed({ ...good, scene: closeup, meter: { ...good.meter!, r: null } })).toEqual(['distance']);
-    expect(failed({ ...good, scene: closeup })).toEqual(['distance']);
+    // ...unless the meter cover, used as a ruler, shows plenty of wall and ground.
+    expect(failed({ ...good, scene: closeup })).toEqual([]);
+  });
+  it('accepts a tight-space photo that still shows 3 ft each side and the ground, however big the meter looks', () => {
+    // Like the 205 E Riverside photos: close enough that the cover fills 15 % of the height, but ~3.5 ft shows each side.
+    const tight: WallEvidence = { ...good, scene: closeup, meter: { x: 0.5, y: 0.3, r: 0.075, source: 'auto' }, width: 1920, height: 1080 };
+    const d = decideWall(tight);
+    expect(d.estimate!.leftFt).toBeGreaterThan(3); expect(d.estimate!.belowFt).toBeGreaterThan(2.5);
+    expect(d.accepted).toBe(true);
+  });
+  it('still calls it too close when the wall beside the meter is cut off', () => {
+    expect(failed({ ...good, meter: { x: 0.5, y: 0.2, r: 0.08, source: 'auto' } })).toEqual(['distance', 'sides']);
+  });
+  it('needs 2.5 ft of ground below the meter', () => {
+    const at = (belowFt: number) => { const r = 0.05, y = 1 - (belowFt * 12 * (2 * r)) / 7; return decideWall({ ...good, meter: { x: 0.5, y, r, source: 'auto' } }); };
+    expect(at(2.7).accepted).toBe(true);
+    expect(at(2.3).reasons).toEqual([M.ground]);
+  });
+  it('"I can’t step back any further" waives distance and side coverage only', () => {
+    const cramped: WallEvidence = { ...good, meter: { x: 0.5, y: 0.2, r: 0.08, source: 'auto' } };
+    const before = decideWall(cramped);
+    expect(before.accepted).toBe(false); expect(spaceLimitedOnly(before)).toBe(true);
+    const after = decideWall({ ...cramped, limitedSpace: true });
+    expect(after).toMatchObject({ accepted: true, limitedSpace: true });
+    expect(after.checks.find(c => c.id === 'distance')!.state).toBe('skipped');
+    // Still needs the meter, the ground, light and focus.
+    expect(spaceLimitedOnly(decideWall({ ...cramped, luma: 10 }))).toBe(false);
+    expect(decideWall({ ...cramped, meter: { ...cramped.meter!, y: 0.9 }, limitedSpace: true }).reasons).toEqual([M.ground]);
+    expect(spaceLimitedOnly(decideWall({ ...good, meter: null }))).toBe(false);
+    expect(spaceLimitedOnly(decideWall(good))).toBe(false);
   });
   it('asks for more wall on the short side', () => {
     expect(decideWall({ ...good, meter: { ...good.meter!, x: 0.1 } }).reasons).toContain(M.moreLeft);

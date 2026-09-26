@@ -40,7 +40,10 @@ export const WALL_CRITERIA = {
   minMeterCandidate: 0.5,
   /** Typical glass-cover diameter of a US socket meter, inches. Used only to estimate distances. */
   meterCoverInches: 7,
-  /** Meter cover diameter as a share of photo height above which the photo is too close ("10 steps back"). */
+  /**
+   * Meter cover diameter as a share of photo height above which the photo looks too close ("10 steps back").
+   * A stand-in only: if the photo still shows the meter, enough wall beside it and the ground, it passes anyway.
+   */
   maxMeterSize: 0.12,
   /** Meter centre must be at least this share of the photo width from each side edge. */
   minSideMargin: 0.2,
@@ -48,8 +51,8 @@ export const WALL_CRITERIA = {
   maxSideMeterX: 0.4,
   /** When the scale is known: minimum wall visible on each side of the meter, feet. */
   minSideFeet: 3,
-  /** When the scale is known: ground must be at least this far below the meter centre to be in frame, feet. */
-  minBelowFeet: 3.5,
+  /** When the scale is known: ground must be at least this far below the meter centre to be in frame, feet (meters sit ~4–5 ft up; this leaves margin for the estimate). */
+  minBelowFeet: 2.5,
   /** When the scale isn't known: meter centre must be above this share of photo height (ground below it). */
   maxMeterY: 0.7,
   minLuma: 45,
@@ -95,7 +98,7 @@ export const WALL_MESSAGES = {
   ready: 'Looks good — take the photo when the whole wall, the meter and the ground are in view.',
   // after capture
   noMeter: 'We need your electric meter in this photo. Step back and include the meter and the wall around it.',
-  tooClose: 'You’re too close to the meter. Step back at least 10 steps so we can see the wall around it.',
+  tooClose: 'You’re too close to the meter. Step back until the wall on both sides of the meter and the ground below it are in the photo.',
   moreLeft: 'Include more of the wall to the left of the meter — step back or move a little to the left.',
   moreRight: 'Include more of the wall to the right of the meter — step back or move a little to the right.',
   ground: 'Include the ground below the meter — tilt the phone down a little or step back.',
