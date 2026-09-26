@@ -22,7 +22,11 @@ type Layout = {
   pos: Record<string, { x: number; y: number }>;
   width: number;
   height: number;
+  nodeW: number;
+  nodeH: number;
   columns: number;
+  colX: number[]; // desktop column x starts
+  waveTopY: number[]; // mobile wave group starts
 };
 
 function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolean): Layout {
@@ -30,24 +34,27 @@ function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolea
   for (const n of nodes) byWave[n.wave].push(n);
 
   // sizes
-  const colGap = 48;
+  const colGap = 64;
   const rowGap = 16;
-  const nodeW = isMobile ? containerWidth - 24 : 180;
-  const nodeH = 56; // ≥44px touch target
+  const nodeW = isMobile ? Math.max(220, containerWidth - 24) : 220;
+  const nodeH = 60; // ≥44px touch target
 
   const columns = isMobile ? 1 : 3;
-  const colWidth = isMobile ? nodeW : nodeW;
+  const colWidth = nodeW;
   const xBase = 12;
   const yBase = 12;
 
   const pos: Record<string, { x: number; y: number }> = {};
   let width = isMobile ? nodeW + 24 : columns * colWidth + (columns - 1) * colGap + 24;
   let height = 0;
+  const colX: number[] = [];
+  const waveTopY: number[] = [];
 
   if (isMobile) {
     // Stack by wave vertically
     let y = yBase;
     for (const wave of [0, 1, 2] as const) {
+      waveTopY[wave] = y;
       const list = byWave[wave];
       for (let i = 0; i < list.length; i++) {
         pos[list[i].id] = { x: xBase, y };
@@ -62,15 +69,16 @@ function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolea
     height = yBase + maxRows * (nodeH + rowGap) + 12;
     for (const wave of [0, 1, 2] as const) {
       const list = byWave[wave];
+      const x = xBase + wave * (colWidth + colGap);
+      colX[wave] = x;
       for (let i = 0; i < list.length; i++) {
-        const x = xBase + wave * (colWidth + colGap);
         const y = yBase + i * (nodeH + rowGap);
         pos[list[i].id] = { x, y };
       }
     }
   }
 
-  return { pos, width, height, columns };
+  return { pos, width, height, nodeW, nodeH, columns, colX, waveTopY };
 }
 
 function nodeColor(n: PlanNodeVM): { bg: string; border: string } {
@@ -85,7 +93,7 @@ function edgeColor(fromId: string, toId: string): string {
   // Emphasize a simple critical path: resolve→(utility_rules|fire)→reconcile
   const cp = (id: string) =>
     id === 'n0_resolve_pack' || id === 'n1_utility_rules' || id === 'n1_fire' || id === 'n2_reconcile';
-  return cp(fromId) && cp(toId) ? '#7C3AED' /* violet */ : '#CBD5E1' /* slate-300 */;
+  return cp(fromId) && cp(toId) ? '#6D28D9' /* violet-700 */ : '#334155' /* slate-700 */;
 }
 
 export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
@@ -94,61 +102,98 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
   const layout = useLayout(nodes, w, isMobile);
 
   return (
-    <div ref={containerRef} className="relative border rounded p-2 md:p-3">
-      <svg width="100%" height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`} className="absolute left-0 top-0 pointer-events-none">
+    <div ref={containerRef} className="relative border rounded p-2 md:p-3" style={{ height: layout.height }}>
+      {/* Single SVG for edges with arrowheads */}
+      <svg
+        width="100%"
+        height={layout.height}
+        viewBox={`0 0 ${layout.width} ${layout.height}`}
+        className="absolute left-0 top-0"
+        style={{ pointerEvents: 'none' }}
+      >
+        <defs>
+          <marker id="arrow-slate" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155" />
+          </marker>
+          <marker id="arrow-violet" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#6D28D9" />
+          </marker>
+        </defs>
         {nodes.map((to) =>
           to.dependsOn.map((fromId) => {
             const from = layout.pos[fromId];
             const dest = layout.pos[to.id];
             if (!from || !dest) return null;
-            const x1 = from.x + (isMobile ? 0 : 180); // right edge for desktop
-            const y1 = from.y + 28;
-            const x2 = dest.x + (isMobile ? 0 : 0); // left edge for desktop; same x for mobile (vertical)
-            const y2 = dest.y + 28;
-            const path =
-              isMobile
-                ? `M ${x1 + 90} ${y1} V ${y2}` // vertical connector in center on mobile
-                : `M ${x1} ${y1} C ${x1 + 24} ${y1}, ${x2 - 24} ${y2}, ${x2} ${y2}`;
+            const sx = isMobile ? from.x + layout.nodeW / 2 : from.x + layout.nodeW;
+            const sy = isMobile ? from.y + layout.nodeH : from.y + layout.nodeH / 2;
+            const tx = isMobile ? dest.x + layout.nodeW / 2 : dest.x;
+            const ty = isMobile ? dest.y : dest.y + layout.nodeH / 2;
+            const color = edgeColor(fromId, to.id);
+            const width = cpEdge(fromId, to.id) ? 4 : 2.5;
+            const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
+            const d = isMobile
+              ? orthogonalPathV(sx, sy, tx, ty)
+              : cubicPathH(sx, sy, tx, ty);
             return (
-              <path key={`${fromId}->${to.id}`} d={path} stroke={edgeColor(fromId, to.id)} strokeWidth={cpEdge(fromId, to.id) ? 3 : 1.5} fill="none" />
+              <path
+                key={`${fromId}->${to.id}`}
+                d={d}
+                stroke={color}
+                strokeWidth={width}
+                fill="none"
+                markerEnd={marker}
+              />
             );
           })
         )}
+        {/* Wave labels in SVG to share coordinates */}
+        {!isMobile &&
+          [0, 1, 2].map((wIdx) => (
+            <text key={wIdx} x={(layout.colX[wIdx] ?? 12) + 4} y={12} fontSize="10" fill="#64748B">
+              WAVE {wIdx}
+            </text>
+          ))}
+        {isMobile &&
+          [0, 1, 2].map((wIdx) => (
+            <text key={wIdx} x={16} y={(layout.waveTopY[wIdx] ?? 12) - 4} fontSize="10" fill="#64748B">
+              WAVE {wIdx}
+            </text>
+          ))}
       </svg>
-      <div className={isMobile ? 'space-y-4' : 'grid md:grid-cols-3 gap-4'}>
-        {[0, 1, 2].map((wave) => {
-          const group = nodes.filter((n) => n.wave === wave);
-          return (
-            <div key={wave} className="space-y-2">
-              <div className="text-xs uppercase tracking-wide text-gray-500 px-1">Wave {wave}</div>
-              {group.map((n) => {
-                const colors = nodeColor(n);
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => onSelectNode(n.id)}
-                    className="relative w-full text-left rounded border px-3 py-3 focus:outline-none"
-                    style={{ background: colors.bg, borderColor: colors.border, minHeight: 56 }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium capitalize">{n.worker.replace('_', ' ')}</div>
-                      {n.degraded && n.worker === 'utility_rules' ? (
-                        <span className="ml-2 inline-block rounded bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5">degraded</span>
-                      ) : null}
-                    </div>
-                    <div className="text-xs mt-0.5">
-                      {n.state === 'PENDING' ? 'Queued' : n.state === 'DONE' && n.conflict ? 'Needs review' : n.state.toLowerCase()}
-                    </div>
-                    {(n.failed || n.state === 'FAILED' || n.conflict) && (
-                      <span className="absolute -inset-0.5 rounded ring-2 ring-red-500 animate-pulse pointer-events-none" />
-                    )}
-                  </button>
-                );
-              })}
+
+      {/* Absolutely positioned HTML nodes using the same layout map */}
+      {nodes.map((n) => {
+        const p = layout.pos[n.id];
+        const colors = nodeColor(n);
+        return (
+          <button
+            key={n.id}
+            onClick={() => onSelectNode(n.id)}
+            className="absolute text-left rounded border px-3 py-3 focus:outline-none"
+            style={{
+              background: colors.bg,
+              borderColor: colors.border,
+              left: p.x,
+              top: p.y,
+              width: layout.nodeW,
+              minHeight: layout.nodeH,
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="font-medium capitalize">{n.worker.replace('_', ' ')}</div>
+              {n.degraded && n.worker === 'utility_rules' ? (
+                <span className="ml-2 inline-block rounded bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5">degraded</span>
+              ) : null}
             </div>
-          );
-        })}
-      </div>
+            <div className="text-xs mt-0.5">
+              {n.state === 'PENDING' ? 'Queued' : n.state === 'DONE' && n.conflict ? 'Needs review' : n.state.toLowerCase()}
+            </div>
+            {(n.failed || n.state === 'FAILED' || n.conflict) && (
+              <span className="absolute -inset-0.5 rounded ring-2 ring-red-500 animate-pulse pointer-events-none" />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -181,4 +226,20 @@ function useRefNumber(initial: number) {
     get: () => r.current.v,
     set: (v: number) => (r.current.v = v),
   };
+}
+
+// Horizontal cubic Bezier from right port to left port (desktop)
+function cubicPathH(sx: number, sy: number, tx: number, ty: number): string {
+  const dx = Math.max(32, (tx - sx) / 2);
+  const c1x = sx + dx;
+  const c1y = sy;
+  const c2x = tx - dx;
+  const c2y = ty;
+  return `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`;
+}
+
+// Orthogonal path from bottom port to top port (mobile)
+function orthogonalPathV(sx: number, sy: number, tx: number, ty: number): string {
+  const midY = sy + (ty - sy) / 2;
+  return `M ${sx} ${sy} V ${midY} H ${tx} V ${ty}`;
 }
