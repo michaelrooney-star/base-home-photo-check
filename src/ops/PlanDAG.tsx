@@ -146,15 +146,15 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
 
   return (
     <div>
-      <div ref={containerRef} className="relative border rounded p-2 md:p-3" style={{ height: layout.height }}>
+      <div ref={containerRef} className="relative border rounded p-2 md:p-3 overflow-x-auto">
+        <div className="relative mx-auto" style={{ width: layout.width, height: layout.height }}>
         {/* Single SVG for edges with arrowheads */}
         <svg
-          width="100%"
-          height={layout.height}
-          viewBox={`0 0 ${layout.width} ${layout.height}`}
-          className="absolute left-0 top-0"
-          style={{ pointerEvents: 'none' }}
-        >
+            width={layout.width}
+            height={layout.height}
+            className="absolute left-0 top-0"
+            style={{ pointerEvents: 'none' }}
+          >
           <defs>
             <marker id="arrow-slate" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155" />
@@ -175,26 +175,37 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
             </>
           )}
           {/* Wave labels in SVG to share coordinates */}
+          {/* Wave labels as HTML to avoid z-index issues */}
+        </svg>
           {!isMobile &&
             [0, 1, 2].map((wIdx) => (
-              <text
+              <div
                 key={wIdx}
-                x={(layout.colX[wIdx] ?? 12) + layout.nodeW / 2}
-                y={10}
-                fontSize="10"
-                fill="#64748B"
-                textAnchor="middle"
+                className="absolute text-[10px] text-slate-500"
+                style={{
+                  left: (layout.colX[wIdx] ?? 12) + layout.nodeW / 2,
+                  top: 2,
+                  transform: 'translateX(-50%)',
+                  pointerEvents: 'none',
+                }}
               >
                 WAVE {wIdx}
-              </text>
+              </div>
             ))}
           {isMobile &&
             [0, 1, 2].map((wIdx) => (
-              <text key={wIdx} x={16} y={(layout.waveTopY[wIdx] ?? 12) - 6} fontSize="10" fill="#64748B">
+              <div
+                key={wIdx}
+                className="absolute text-[10px] text-slate-500"
+                style={{
+                  left: 16,
+                  top: (layout.waveTopY[wIdx] ?? 12) - 10,
+                  pointerEvents: 'none',
+                }}
+              >
                 WAVE {wIdx}
-              </text>
+              </div>
             ))}
-        </svg>
 
       {/* Absolutely positioned HTML nodes using the same layout map */}
       {nodes.map((n) => {
@@ -239,6 +250,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* Optional tiny legend for judges */}
@@ -342,7 +354,7 @@ function drawDesktopBusPaths(
     const ssz = sizeOf(s.id);
     const sx = sp.x + ssz.w;
     const sy = sp.y + ssz.h / 2;
-    const busX = (layout.colX[0] ?? sp.x) + layout.nodeW + 24;
+    const busX = sx + 12; // just to the right of source column
     for (const child of wave1) {
       const cp = layout.pos[child.id];
       const csz = sizeOf(child.id);
@@ -359,7 +371,7 @@ function drawDesktopBusPaths(
     const tsz = sizeOf(t.id);
     const tx = tp.x;
     const ty = tp.y + tsz.h / 2;
-    const busX = (layout.colX[2] ?? tp.x) - 24;
+    const busX = tx - 12; // just to the left of target column
     for (const child of wave1) {
       const cp = layout.pos[child.id];
       const csz = sizeOf(child.id);
