@@ -146,7 +146,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
 
   return (
     <div>
-      <div ref={containerRef} className="relative border rounded p-2 md:p-3 overflow-x-auto">
+      <div ref={containerRef} className="console-dag-canvas relative border rounded p-2 md:p-3 overflow-x-auto">
         <div className="relative mx-auto" style={{ width: layout.width, height: layout.height }}>
         {/* Single SVG for edges with arrowheads */}
         <svg
@@ -254,7 +254,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
       </div>
 
       {/* Optional tiny legend for judges */}
-      <div className="mt-2 text-xs text-gray-600 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="console-dag-legend mt-2 text-xs text-gray-600 flex flex-wrap items-center gap-x-4 gap-y-2">
         <LegendItem icon={<CheckCircle size={16} className="text-green-600" />} label="Success" />
         <LegendItem icon={<Loader2 size={16} className="text-blue-600" />} label="Running" />
         <LegendItem icon={<AlertTriangle size={16} className="text-amber-600" />} label="Needs review / Degraded" />

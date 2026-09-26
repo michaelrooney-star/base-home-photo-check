@@ -10,7 +10,7 @@ import {
 async function runResolvePack(caseRec: CaseRecord): Promise<WorkerResult> {
   return {
     status: 'ok',
-    findings: caseRec.why, // seed-level pack findings
+    findings: caseRec.why, // seed-level pack findings (includes ruleIds)
     attempts: 1,
   };
 }
@@ -44,6 +44,7 @@ async function runFireWorker(caseRec: CaseRecord): Promise<WorkerResult> {
             'Worker returned NO_REQUIREMENT but verified graph indicates requirements exist.',
           citations: [],
           requirement: 'NO_REQUIREMENT',
+          ruleIds: ['austin_fire_guidance'],
         },
       ],
       attempts: 1,
@@ -57,6 +58,7 @@ async function runFireWorker(caseRec: CaseRecord): Promise<WorkerResult> {
         summary: 'Fire code requirements likely apply; verify against current local adoption.',
         citations: [],
         requirement: 'REQUIRES',
+        ruleIds: ['austin_fire_guidance'],
       },
     ],
     attempts: 1,

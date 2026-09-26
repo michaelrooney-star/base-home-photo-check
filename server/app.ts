@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { prettyJSON } from 'hono/pretty-json';
-import { resetStore, listCasesByAssignee, getCase, saveCase } from './store';
+import { resetStore, listCasesByAssignee, getCase, saveCase, ensureRulesLoaded, store } from './store';
 import { seedDemoCases, deriveUtilityType, resolvePack } from './seed';
 import { planAndRun } from './runner';
-import type { CreateCaseBody } from './types';
+import type { CreateCaseBody, PackId } from './types';
 
 export function createApp() {
   const app = new Hono().basePath('/api');
@@ -82,6 +82,38 @@ export function createApp() {
     });
   });
 
+  // Knowledge base endpoints
+  app.get('/admin/knowledge/packs', (c) => {
+    ensureRulesLoaded();
+    const packs = (awaitPackList() as { id: PackId; name: string }[]);
+    const data = packs.map((p) => {
+      const rids = store.packToRuleIds?.get(p.id) ?? [];
+      const rules = rids.map((id) => store.rulesById?.get(id)).filter(Boolean) as any[];
+      const byStatus = rules.reduce<Record<string, number>>((acc, r) => {
+        acc[r.status] = (acc[r.status] ?? 0) + 1;
+        return acc;
+      }, {});
+      return { packId: p.id, name: p.name, counts: { total: rids.length, byStatus } };
+    });
+    return c.json({ packs: data });
+  });
+
+  app.get('/admin/knowledge/packs/:packId', (c) => {
+    ensureRulesLoaded();
+    const { packId } = c.req.param();
+    const rids = store.packToRuleIds?.get(packId as PackId) ?? [];
+    const rules = rids.map((id) => store.rulesById?.get(id)).filter(Boolean);
+    return c.json({ packId, rules });
+  });
+
+  app.get('/admin/knowledge/rules/:ruleId', (c) => {
+    ensureRulesLoaded();
+    const { ruleId } = c.req.param();
+    const rule = store.rulesById?.get(ruleId);
+    if (!rule) return c.json({ error: 'not_found' }, 404);
+    return c.json(rule);
+  });
+
   app.post('/admin/reset', (c) => {
     resetStore();
     seedDemoCases();
@@ -113,4 +145,15 @@ export function createApp() {
   });
 
   return app;
+}
+
+function awaitPackList(): { id: PackId; name: string }[] {
+  return [
+    { id: 'AUSTIN_RICH', name: 'Austin (Rich)' },
+    { id: 'ROUNDROCK_ONCOR', name: 'Round Rock (Oncor)' },
+    { id: 'DALLAS_ONCOR', name: 'Dallas (Oncor)' },
+    { id: 'HOUSTON_STUB', name: 'Houston (stub)' },
+    { id: 'SANANTONIO_STUB', name: 'San Antonio (stub)' },
+    { id: 'UNKNOWN_PACK', name: 'Unknown' },
+  ];
 }

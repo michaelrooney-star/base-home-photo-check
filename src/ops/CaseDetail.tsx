@@ -1,46 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, CheckCircle2, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { StatusPill, statusLabel, statusTone } from '../components/ConsoleShell';
 import { PlanDAG } from './PlanDAG';
 import type { PlanNodeVM } from './PlanDAG';
 
-type Finding = {
-  domain: string;
-  summary: string;
-  citations: { label: string; url?: string }[];
-  requirement?: string;
-};
-
-type PlanNodeRaw = {
-  id: string;
-  worker: 'resolve_pack' | 'city' | 'electrical' | 'fire' | 'utility_rules' | 'reconcile';
-  wave: 0 | 1 | 2;
-  dependsOn: string[];
-  state: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
-  result?: {
-    status: 'ok' | 'failed';
-    attempts: number;
-    error?: string;
-    findings?: Finding[];
-    degraded?: boolean;
-  };
-};
-
-type CaseRec = {
-  id: string;
-  assignee: string;
-  pack: string;
-  jobState: string;
-  status: string;
-  degraded: boolean;
-  fingerprint: {
-    address: string;
-    city: string;
-    utility: string;
-    service_amps: number;
-  };
-  why: Finding[];
-  plan: PlanNodeRaw[];
-};
+type Finding = { domain: string; summary: string; citations: { label: string; url?: string }[]; requirement?: string; ruleIds?: string[] };
+type PlanNodeRaw = { id: string; worker: 'resolve_pack' | 'city' | 'electrical' | 'fire' | 'utility_rules' | 'reconcile'; wave: 0 | 1 | 2; dependsOn: string[]; state: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'; result?: { status: 'ok' | 'failed'; attempts: number; error?: string; findings?: Finding[]; degraded?: boolean } };
+type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[] };
 
 export function CaseDetail() {
   const { userId, caseId } = useParams();
@@ -53,190 +20,44 @@ export function CaseDetail() {
   async function load() {
     const res = await fetch(`/api/ops/cases/${caseId}`);
     const data = await res.json();
-    setRec(data);
-    setLoading(false);
+    setRec(data); setLoading(false);
   }
+  useEffect(() => { setLoading(true); setSelectedNodeId(null); void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [caseId]);
+  async function replan() { setPlanning(true); await fetch(`/api/ops/cases/${caseId}/plan`, { method: 'POST' }); await load(); setPlanning(false); }
 
-  useEffect(() => {
-    setLoading(true);
-    setSelectedNodeId(null);
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseId]);
+  const vmNodes: PlanNodeVM[] = useMemo(() => !rec ? [] : rec.plan.map((n) => ({
+    id: n.id, worker: n.worker, wave: n.wave, dependsOn: n.dependsOn, state: n.state,
+    conflict: n.worker === 'fire' && n.result?.findings?.some((f) => f.domain === 'FIRE' && f.requirement === 'NO_REQUIREMENT'),
+    failed: n.state === 'FAILED', degraded: rec.degraded && n.worker === 'utility_rules',
+  })), [rec]);
+  const selectedNode = useMemo(() => rec?.plan.find((n) => n.id === selectedNodeId), [rec, selectedNodeId]);
+  function onSelectNode(id: string) { setSelectedNodeId(id); setShowSheet(true); }
+  function closeNode() { setSelectedNodeId(null); setShowSheet(false); }
 
-  async function replan() {
-    setPlanning(true);
-    await fetch(`/api/ops/cases/${caseId}/plan`, { method: 'POST' });
-    await load();
-    setPlanning(false);
-  }
+  if (loading || !rec) return <div className="console-loading">Loading case…</div>;
 
-  const vmNodes: PlanNodeVM[] = useMemo(() => {
-    if (!rec) return [];
-    return rec.plan.map((n) => {
-      const conflict =
-        n.worker === 'fire' &&
-        n.result?.findings?.some((f) => f.domain === 'FIRE' && f.requirement === 'NO_REQUIREMENT');
-      const failed = n.state === 'FAILED';
-      const degraded = rec.degraded && n.worker === 'utility_rules';
-      return {
-        id: n.id,
-        worker: n.worker,
-        wave: n.wave,
-        dependsOn: n.dependsOn,
-        state: n.state,
-        conflict,
-        degraded,
-        failed,
-      };
-    });
-  }, [rec]);
+  return <section className={`console-page console-case-detail ${selectedNodeId ? 'has-detail-rail' : ''}`}>
+    <div className="console-case-header"><Link className="console-back-link" to={`/ops/${userId}`}><ArrowLeft size={16} /> Back to queue</Link><div className="console-case-title"><p className="console-eyebrow"><span /> CASE DETAIL</p><h1>Case {rec.id.slice(0, 6)}<span>.</span></h1></div><div className="console-case-actions"><StatusPill tone={statusTone(rec.status, rec.degraded)}>{rec.degraded ? 'Degraded' : statusLabel(rec.status)}</StatusPill><button className="console-primary-button" onClick={replan} disabled={planning || rec.status === 'UNKNOWN'}><RefreshCw size={16} className={planning ? 'console-spin' : ''} />{planning ? 'Replanning…' : 'Replan'}</button></div></div>
 
-  function onSelectNode(id: string) {
-    setSelectedNodeId(id);
-    setShowSheet(true);
-  }
+    <div className="console-case-meta"><div><span>Address</span><strong>{rec.fingerprint.address}</strong></div><div><span>City</span><strong>{rec.fingerprint.city}</strong></div><div><span>Utility</span><strong>{rec.fingerprint.utility}</strong></div><div><span>Service</span><strong>{rec.fingerprint.service_amps} amp</strong></div><div><span>Jurisdiction pack</span><strong>{rec.pack}</strong></div></div>
 
-  const selectedNode = useMemo(
-    () => rec?.plan.find((n) => n.id === selectedNodeId),
-    [rec, selectedNodeId]
-  );
+    <div className="console-workflow-heading"><div><p className="console-eyebrow"><span /> WORKFLOW PLAN</p><h2>Research path</h2></div><span>Click a worker to inspect its evidence and run state.</span></div>
+    <div className="console-workflow-card"><div className="console-dag"><PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} /></div></div>
 
-  if (loading || !rec) return <div>Loading…</div>;
+    <details className="console-plan-list" role="group"><summary><span><strong>Plan list</strong><small>Accessible workflow summary</small></span><span>{rec.plan.length} workers</span></summary><ul>{rec.plan.map((n) => <li key={n.id}><button onClick={() => onSelectNode(n.id)}>{n.worker.replaceAll('_', ' ')}</button><span>Wave {n.wave}</span><StatusPill tone={n.state === 'DONE' ? 'ready' : n.state === 'FAILED' ? 'danger' : n.state === 'RUNNING' ? 'queued' : 'muted'}>{n.state === 'PENDING' ? 'Queued' : statusLabel(n.state)}</StatusPill></li>)}</ul></details>
 
-  const statusChip =
-    rec.status === 'OPS_READY'
-      ? 'bg-green-100 text-green-800'
-      : rec.status === 'NEEDS_REVIEW'
-      ? 'bg-amber-100 text-amber-800'
-      : rec.status === 'BLOCKED'
-      ? 'bg-red-100 text-red-800'
-      : 'bg-gray-100 text-gray-800';
-
-  return (
-    <div className="space-y-4">
-      {/* Sticky status bar */}
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
-        <div className="flex items-center gap-3 px-2 py-2 md:px-0">
-          <Link className="text-blue-600 hover:underline" to={`/ops/${userId}`}>← Back</Link>
-          <h2 className="text-base md:text-lg font-medium">Case {rec.id.slice(0, 6)}</h2>
-          <span className="hidden md:inline text-sm text-gray-500">Pack: {rec.pack}</span>
-          <span className={`text-xs md:text-sm rounded px-2 py-0.5 ${statusChip}`}>{rec.status.replace('_', ' ')}</span>
-          {rec.degraded ? <span className="text-xs md:text-sm rounded bg-yellow-100 text-yellow-800 px-2 py-0.5">degraded</span> : null}
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              className="rounded bg-blue-600 text-white px-4 py-3 text-sm md:text-base disabled:opacity-50"
-              onClick={replan}
-              disabled={planning || rec.status === 'UNKNOWN'}
-              aria-label="Replan"
-            >
-              {planning ? 'Replanning…' : 'Replan'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Primary: DAG */}
-      <div className={selectedNodeId ? 'md:pr-[400px] transition-[padding] duration-150' : ''}>
-        <PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} />
-      </div>
-
-      {/* Secondary: compact list for a11y (collapsed by default) */}
-      <details className="border rounded p-3" role="group">
-        <summary className="font-medium cursor-pointer">Plan (List)</summary>
-        <div className="text-xs text-gray-500 mb-2">Compact accessibility list</div>
-        <ul className="mt-2 space-y-1">
-          {rec.plan.map((n) => (
-            <li key={n.id} className="flex items-center gap-2">
-              <button className="underline text-blue-600" onClick={() => onSelectNode(n.id)}>
-                {n.worker.replace('_', ' ')}
-              </button>
-              <span className="text-xs uppercase tracking-wide text-gray-500">wave {n.wave}</span>
-              <span className="text-sm">{n.state === 'PENDING' ? 'Queued' : n.state.toLowerCase()}</span>
-            </li>
-          ))}
-        </ul>
-      </details>
-
-      {/* Node detail: right rail on desktop, bottom sheet on mobile */}
-      {selectedNode ? (
-        <>
-          {/* Desktop rail */}
-          <aside className="hidden md:block fixed right-0 top-0 bottom-0 w-[400px] border-l bg-white overflow-y-auto z-50">
-            <NodeDetail node={selectedNode} rec={rec} onClose={() => setSelectedNodeId(null)} />
-          </aside>
-          {/* Mobile bottom sheet */}
-          <div className={`md:hidden fixed inset-0 z-50 ${showSheet ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-            <div
-              className={`absolute inset-0 bg-black/30 transition-opacity ${showSheet ? 'opacity-100' : 'opacity-0'}`}
-              onClick={() => setSelectedNodeId(null)}
-            />
-            <div
-              className={`absolute left-0 right-0 bottom-0 bg-white rounded-t-lg border-t shadow-lg p-3 transition-transform ${showSheet ? 'translate-y-0' : 'translate-y-full'}`}
-            >
-              <div className="mx-auto h-1 w-12 rounded bg-gray-300 mb-2" />
-              <NodeDetail node={selectedNode} rec={rec} onClose={() => setSelectedNodeId(null)} />
-            </div>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
+    {selectedNode && <><aside className="console-detail-rail"><NodeDetail node={selectedNode} rec={rec} onClose={closeNode} /></aside><div className={`console-sheet-backdrop ${showSheet ? 'is-open' : ''}`} onClick={closeNode}><aside className={`console-detail-sheet ${showSheet ? 'is-open' : ''}`} onClick={(e) => e.stopPropagation()}><div className="console-sheet-handle" /><NodeDetail node={selectedNode} rec={rec} onClose={closeNode} /></aside></div></>}
+  </section>;
 }
 
 function NodeDetail({ node, rec, onClose }: { node: PlanNodeRaw; rec: CaseRec; onClose: () => void }) {
-  const title = node.worker.replace('_', ' ');
+  const title = node.worker.replaceAll('_', ' ');
   const domain = workerToDomain(node.worker);
   const cites = rec.why.filter((f) => f.domain === domain);
-  return (
-    <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-medium capitalize">{title}</h3>
-        <button className="rounded bg-gray-100 px-3 py-1" onClick={onClose}>Close</button>
-      </div>
-      <div className="text-sm">
-        <div><span className="text-gray-500">State:</span> {node.state === 'PENDING' ? 'Queued' : node.state.toLowerCase()}</div>
-        {node.result?.status === 'failed' ? (
-          <div className="text-red-700">Error: {node.result.error}</div>
-        ) : null}
-        <div className="text-gray-500">Attempts: {node.result?.attempts ?? 0}</div>
-      </div>
-      <div>
-        <h4 className="text-sm font-medium">Why?</h4>
-        {cites.length === 0 ? (
-          <div className="text-sm text-gray-500">No citations for this domain yet.</div>
-        ) : (
-          <ul className="list-disc pl-5 text-sm">
-            {cites.map((f, i) => (
-              <li key={i}>
-                <div>{f.summary}</div>
-                {f.citations.map((c, j) => (
-                  <div key={j}>
-                    {c.url ? <a className="underline text-blue-700" href={c.url} target="_blank" rel="noreferrer">{c.label}</a> : c.label}
-                  </div>
-                ))}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
+  const tone = node.state === 'FAILED' ? 'danger' : node.state === 'DONE' ? 'ready' : node.state === 'RUNNING' ? 'queued' : 'muted';
+  return <div className="console-detail-content"><div className="console-detail-heading"><div><p className="console-eyebrow"><span /> WORKER DETAIL</p><h2>{title}</h2></div><button className="console-icon-button" onClick={onClose} aria-label="Close detail"><X size={18} /></button></div><div className="console-detail-stats"><div><span>State</span><StatusPill tone={tone}>{node.state === 'PENDING' ? 'Queued' : statusLabel(node.state)}</StatusPill></div><div><span>Attempts</span><strong>{node.result?.attempts ?? 0}</strong></div></div>{node.result?.status === 'failed' && <div className="console-error-note">{node.result.error}</div>}<div className="console-evidence"><h3><CheckCircle2 size={16} /> Why this worker ran</h3>{cites.length === 0 ? <p>No citations for this domain yet.</p> : <ul>{cites.map((f, i) => <li key={i}><p>{f.summary}</p>{f.ruleIds && f.ruleIds.length > 0 && <div className="console-rule-tags">{f.ruleIds.map((rid) => <Link key={rid} to={`/admin/knowledge/rules/${rid}`}>{rid}</Link>)}</div>}{f.citations.map((c, j) => c.url ? <a key={j} href={c.url} target="_blank" rel="noreferrer">{c.label}<ExternalLink size={13} /></a> : <span key={j}>{c.label}</span>)}</li>)}</ul>}</div></div>;
 }
 
 function workerToDomain(worker: PlanNodeRaw['worker']): string {
-  switch (worker) {
-    case 'fire':
-      return 'FIRE';
-    case 'utility_rules':
-      return 'UTILITY_INTERCONNECTION';
-    case 'city':
-      return 'PERMIT';
-    case 'electrical':
-      return 'ELECTRICAL';
-    case 'resolve_pack':
-    case 'reconcile':
-    default:
-      return 'PERMIT';
-  }
+  switch (worker) { case 'fire': return 'FIRE'; case 'utility_rules': return 'UTILITY_INTERCONNECTION'; case 'city': return 'PERMIT'; case 'electrical': return 'ELECTRICAL'; default: return 'PERMIT'; }
 }

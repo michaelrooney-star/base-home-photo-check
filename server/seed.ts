@@ -1,4 +1,4 @@
-import { saveCase, store } from './store';
+import { saveCase, store, ensureRulesLoaded } from './store';
 import {
   CaseFingerprint,
   CaseRecord,
@@ -26,82 +26,31 @@ export function resolvePack(city: string, utility: string): PackId {
   return 'UNKNOWN_PACK';
 }
 
-// Minimal citations — do not invent numbers. Use high-level official sources only.
-const packCitations: Record<PackId, Finding[]> = {
-  AUSTIN_RICH: [
-    {
+function findingsForPack(pack: PackId): Finding[] {
+  ensureRulesLoaded();
+  const rids = store.packToRuleIds?.get(pack) ?? [];
+  const out: Finding[] = [];
+  for (const rid of rids) {
+    const r = store.rulesById?.get(rid);
+    if (!r) continue;
+    out.push({
+      domain: r.domain,
+      summary: r.requires[0] ?? '',
+      citations: r.source.url ? [{ label: r.source.document ?? r.source.authority, url: r.source.url }] : [],
+      requirement: 'REQUIRES',
+      ruleIds: [r.rule_id],
+    });
+  }
+  if (out.length === 0) {
+    out.push({
       domain: 'PERMIT',
-      summary:
-        'City of Austin generally requires building/electrical permits for residential energy storage installs.',
-      citations: [
-        {
-          label: 'City of Austin Development Services – Residential permits',
-          url: 'https://www.austintexas.gov/department/development-services',
-        },
-      ],
-      requirement: 'REQUIRES',
-    },
-    {
-      domain: 'FIRE',
-      summary:
-        'Austin Fire Department publishes guidance for stationary storage safety; verify latest AFD materials.',
-      citations: [
-        {
-          label: 'Austin Fire Department – Fire Codes and Permitting',
-          url: 'https://www.austintexas.gov/department/fire',
-        },
-      ],
-      requirement: 'REQUIRES',
-    },
-    {
-      domain: 'UTILITY_INTERCONNECTION',
-      summary:
-        'Austin Energy (MOU) maintains its own interconnection processes separate from TDUs.',
-      citations: [
-        {
-          label: 'Austin Energy – Distributed Generation/Interconnection',
-          url: 'https://www.austinenergy.com/',
-        },
-        {
-          label: 'Texas SB 1252 context: municipal utilities (MOUs) exceptions',
-          url: 'https://capitol.texas.gov/',
-        },
-      ],
-      requirement: 'REQUIRES',
-    },
-  ],
-  ONCOR_SHARED: [
-    {
-      domain: 'UTILITY_INTERCONNECTION',
-      summary:
-        'Oncor (TDU) uses PUCT/TAC-aligned distributed generation interconnection; city permits are separate.',
-      citations: [
-        {
-          label: 'Oncor – Distributed Generation Interconnection resources',
-          url: 'https://www.oncor.com/',
-        },
-        {
-          label: 'Texas SB 1202 / TAC references (local where applicable)',
-          url: 'https://capitol.texas.gov/',
-        },
-      ],
-      requirement: 'REQUIRES',
-    },
-  ],
-  ROUNDROCK_ONCOR: [],
-  DALLAS_ONCOR: [],
-  HOUSTON_STUB: [],
-  SANANTONIO_STUB: [],
-  UNKNOWN_PACK: [
-    {
-      domain: 'PERMIT',
-      summary:
-        'Jurisdiction pack unknown; fail-closed until verified sources added.',
+      summary: 'Jurisdiction pack unknown; fail-closed until verified sources added.',
       citations: [],
       requirement: 'UNKNOWN',
-    },
-  ],
-};
+    });
+  }
+  return out;
+}
 
 function makeFingerprint(overrides: Partial<CaseFingerprint>): CaseFingerprint {
   const base: CaseFingerprint = {
@@ -139,12 +88,13 @@ function newCase(
     status: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
     degraded: false,
     plan: [],
-    why: packCitations[pack] ?? [],
+    why: findingsForPack(pack),
   };
 }
 
 export function seedDemoCases() {
   if (store.seeded) return;
+  ensureRulesLoaded();
   const cases: CaseRecord[] = [];
 
   // Austin rich – several cases for Maya
