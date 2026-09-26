@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { ReactElement } from 'react';
 import { CheckCircle, Loader2, Clock, AlertTriangle, AlertOctagon, HelpCircle } from 'lucide-react';
 
 export type PlanNodeVM = {
@@ -121,43 +122,34 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#6D28D9" />
             </marker>
           </defs>
-          {nodes.map((to) =>
-            to.dependsOn.map((fromId) => {
-              const from = layout.pos[fromId];
-              const dest = layout.pos[to.id];
-              if (!from || !dest) return null;
-              const sx = isMobile ? from.x + layout.nodeW / 2 : from.x + layout.nodeW;
-              const sy = isMobile ? from.y + layout.nodeH : from.y + layout.nodeH / 2;
-              const tx = isMobile ? dest.x + layout.nodeW / 2 : dest.x;
-              const ty = isMobile ? dest.y : dest.y + layout.nodeH / 2;
-              const color = edgeColor(fromId, to.id);
-              const width = cpEdge(fromId, to.id) ? 4 : 2.5;
-              const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
-              const d = isMobile
-                ? orthogonalPathV(sx, sy, tx, ty)
-                : cubicPathH(sx, sy, tx, ty);
-              return (
-                <path
-                  key={`${fromId}->${to.id}`}
-                  d={d}
-                  stroke={color}
-                  strokeWidth={width}
-                  fill="none"
-                  markerEnd={marker}
-                />
-              );
-            })
+          {isMobile ? (
+            // Mobile: draw simple vertical trunks between wave groups
+            <>
+              {drawMobileTrunk(nodes, layout)}
+            </>
+          ) : (
+            // Desktop: orthogonal bus fan-out/fan-in, per-edge with arrowheads
+            <>
+              {drawDesktopBusPaths(nodes, layout)}
+            </>
           )}
           {/* Wave labels in SVG to share coordinates */}
           {!isMobile &&
             [0, 1, 2].map((wIdx) => (
-              <text key={wIdx} x={(layout.colX[wIdx] ?? 12) + 4} y={12} fontSize="10" fill="#64748B">
+              <text
+                key={wIdx}
+                x={(layout.colX[wIdx] ?? 12) + layout.nodeW / 2}
+                y={10}
+                fontSize="10"
+                fill="#64748B"
+                textAnchor="middle"
+              >
                 WAVE {wIdx}
               </text>
             ))}
           {isMobile &&
             [0, 1, 2].map((wIdx) => (
-              <text key={wIdx} x={16} y={(layout.waveTopY[wIdx] ?? 12) - 4} fontSize="10" fill="#64748B">
+              <text key={wIdx} x={16} y={(layout.waveTopY[wIdx] ?? 12) - 6} fontSize="10" fill="#64748B">
                 WAVE {wIdx}
               </text>
             ))}
@@ -246,22 +238,6 @@ function useRefNumber(initial: number) {
   };
 }
 
-// Horizontal cubic Bezier from right port to left port (desktop)
-function cubicPathH(sx: number, sy: number, tx: number, ty: number): string {
-  const dx = Math.max(32, (tx - sx) / 2);
-  const c1x = sx + dx;
-  const c1y = sy;
-  const c2x = tx - dx;
-  const c2y = ty;
-  return `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`;
-}
-
-// Orthogonal path from bottom port to top port (mobile)
-function orthogonalPathV(sx: number, sy: number, tx: number, ty: number): string {
-  const midY = sy + (ty - sy) / 2;
-  return `M ${sx} ${sy} V ${midY} H ${tx} V ${ty}`;
-}
-
 function nodeVisual(n: PlanNodeVM): {
   Icon: typeof CheckCircle;
   label: string;
@@ -293,4 +269,73 @@ function LegendItem({ icon, label }: { icon: React.ReactNode; label: string }) {
       <span>{label}</span>
     </div>
   );
+}
+
+// Helpers: desktop bus layout
+function drawDesktopBusPaths(nodes: PlanNodeVM[], layout: ReturnType<typeof useLayout>): ReactElement[] {
+  const wave0 = nodes.filter((n) => n.wave === 0);
+  const wave1 = nodes.filter((n) => n.wave === 1);
+  const wave2 = nodes.filter((n) => n.wave === 2);
+  const out: ReactElement[] = [];
+  const s = wave0.find((n) => n.worker === 'resolve_pack') ?? wave0[0];
+  const t = wave2.find((n) => n.worker === 'reconcile') ?? wave2[0];
+  if (s && wave1.length > 0) {
+    const sp = layout.pos[s.id];
+    const sx = sp.x + layout.nodeW;
+    const sy = sp.y + layout.nodeH / 2;
+    const busX = (layout.colX[0] ?? sp.x) + layout.nodeW + 24;
+    for (const child of wave1) {
+      const cp = layout.pos[child.id];
+      const cy = cp.y + layout.nodeH / 2;
+      const color = edgeColor(s.id, child.id);
+      const width = cpEdge(s.id, child.id) ? 4 : 2.5;
+      const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
+      const d = `M ${sx} ${sy} L ${busX} ${sy} L ${busX} ${cy} L ${cp.x} ${cy}`;
+      out.push(<path key={`${s.id}->${child.id}`} d={d} stroke={color} strokeWidth={width} fill="none" markerEnd={marker} />);
+    }
+  }
+  if (t && wave1.length > 0) {
+    const tp = layout.pos[t.id];
+    const tx = tp.x;
+    const ty = tp.y + layout.nodeH / 2;
+    const busX = (layout.colX[2] ?? tp.x) - 24;
+    for (const child of wave1) {
+      const cp = layout.pos[child.id];
+      const sx = cp.x + layout.nodeW;
+      const sy = cp.y + layout.nodeH / 2;
+      const color = edgeColor(child.id, t.id);
+      const width = cpEdge(child.id, t.id) ? 4 : 2.5;
+      const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
+      const d = `M ${sx} ${sy} L ${busX} ${sy} L ${busX} ${ty} L ${tx} ${ty}`;
+      out.push(<path key={`${child.id}->${t.id}`} d={d} stroke={color} strokeWidth={width} fill="none" markerEnd={marker} />);
+    }
+  }
+  return out;
+}
+
+// Helpers: mobile vertical trunks between waves (no per-sibling edges)
+function drawMobileTrunk(nodes: PlanNodeVM[], layout: ReturnType<typeof useLayout>): ReactElement[] {
+  const out: ReactElement[] = [];
+  // Compute group bounding boxes
+  const group = (wave: 0 | 1 | 2) => {
+    const list = nodes.filter((n) => n.wave === wave);
+    if (list.length === 0) return null;
+    const top = Math.min(...list.map((n) => layout.pos[n.id].y));
+    const bottom = Math.max(...list.map((n) => layout.pos[n.id].y + layout.nodeH));
+    const cx = (layout.pos[list[0].id].x ?? 12) + layout.nodeW / 2;
+    return { top, bottom, cx };
+  };
+  const g0 = group(0);
+  const g1 = group(1);
+  const g2 = group(2);
+  const arrow = 'url(#arrow-slate)';
+  if (g0 && g1) {
+    const d = `M ${g0.cx} ${g0.bottom} V ${g1.top - 8}`;
+    out.push(<path key="g0-g1" d={d} stroke="#334155" strokeWidth={3} fill="none" markerEnd={arrow} />);
+  }
+  if (g1 && g2) {
+    const d = `M ${g1.cx} ${g1.bottom} V ${g2.top - 8}`;
+    out.push(<path key="g1-g2" d={d} stroke="#334155" strokeWidth={3} fill="none" markerEnd={arrow} />);
+  }
+  return out;
 }

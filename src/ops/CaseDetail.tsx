@@ -141,12 +141,10 @@ export function CaseDetail() {
         <PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} />
       </div>
 
-      {/* Secondary: compact list for a11y */}
-      <div className="border rounded p-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium">Plan (List)</h3>
-          <div className="text-xs text-gray-500">Compact accessibility list</div>
-        </div>
+      {/* Secondary: compact list for a11y (collapsed by default) */}
+      <details className="border rounded p-3" role="group">
+        <summary className="font-medium cursor-pointer">Plan (List)</summary>
+        <div className="text-xs text-gray-500 mb-2">Compact accessibility list</div>
         <ul className="mt-2 space-y-1">
           {rec.plan.map((n) => (
             <li key={n.id} className="flex items-center gap-2">
@@ -158,7 +156,7 @@ export function CaseDetail() {
             </li>
           ))}
         </ul>
-      </div>
+      </details>
 
       {/* Node detail: right rail on desktop, bottom sheet on mobile */}
       {selectedNode ? (
