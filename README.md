@@ -149,7 +149,7 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 **Telling the customer what we're looking for.** Before each wall photo, a short card lists what the photo needs to show: the meter, the wall on both sides or along one side, the ground in front of the wall, and 3 ft of open wall with nothing mounted on it. It also gives the tips: step back, phone sideways, 0.5× lens. The result card shows the same list, each item found or not found with a short reason, followed by a highlighted box:
 - **How to fix it** when the photo isn't accepted;
 - **Can you show more of the wall?** when the photo is accepted but open wall hasn't been found yet. Here "Retake to show more wall" is the main button and "Use this photo" is secondary.
-The photo is marked up too: open wall in green, what's in the way in orange, and a dashed "Ground not in the photo" line when needed. The full list of technical checks sits behind "All photo checks".
+The photo is marked up too: each detected object (electrical box, cabinet, AC unit, plants) is outlined where it is, the open stretch of wall is shaded green with its width, and a dashed "Ground not in the photo" line appears when needed. The full list of technical checks sits behind "All photo checks".
 
 **On a phone.** While photos are being taken, the site header, journey bar, footer and checklist sidebar are hidden, so the camera sits near the top of the screen. Held sideways, as the wall photos ask, the camera fills the screen height and the instructions and result sit in a column beside it. The result card is kept short, for someone holding a phone with their hands full:
 - a verdict ("Retake needed" / "Photo accepted" / "Accepted — can you show more wall?");

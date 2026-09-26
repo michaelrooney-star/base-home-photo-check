@@ -240,3 +240,13 @@
 .report-card details{font-size:13px;margin-bottom:12px}.report-card details ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
 @media(max-width:760px){.review-item{grid-template-columns:72px minmax(0,1fr);}.review-item>.text-button{grid-column:2;justify-self:start;min-height:28px}.review-thumb{width:72px;height:56px}.report-card dl>div{grid-template-columns:1fr;gap:0}}
 .tap-hint{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);z-index:2;background:#1f261fd9;color:#fff;font-size:13px;padding:6px 12px;border-radius:14px;white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis}
+/* Highlight what the detector found, where it is in the photo */
+.space-marks{position:absolute;z-index:2;pointer-events:none}
+.space-marks>span{position:absolute;box-sizing:border-box;border-radius:6px}
+.space-object{border:3px solid #f97316;background:#f9731626;box-shadow:0 0 0 1px #0006}
+.space-object.plants{border-style:dashed;background:#f973161a}
+.space-open{border:3px dashed #22c55e;background:#22c55e2e}
+.space-marks em{position:absolute;left:-3px;top:-3px;transform:translateY(-100%);font-style:normal;font-size:12px;font-weight:600;white-space:nowrap;padding:2px 7px;border-radius:6px 6px 6px 0;color:#fff;background:#c2410c}
+.space-object.label-inside em{transform:none;border-radius:0 0 6px 0}
+.space-open em{background:#15803d;top:auto;bottom:-3px;transform:none;border-radius:0 6px 0 6px}
+.space-object.label-right em{left:auto;right:-3px;border-radius:6px 6px 0 6px}
