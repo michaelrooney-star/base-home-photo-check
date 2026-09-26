@@ -18,7 +18,7 @@ export function checklist(photos: Photos, fence: Answer, location: string) {
       const c = p.check;
       const note = c?.meterNumber ? `Meter ${c.meterNumber}`
         : c?.amps ? `Reads ${c.amps} A`
-        : id === 'breaker' && location ? `In the ${location === 'outside' ? 'outside wall' : location}`
+        : id === 'breaker' && location ? (location === 'outside' ? 'Outside' : location === 'not sure' ? 'Location not sure' : `In the ${location}`)
         : c?.space?.spot ? `Open wall, about ${Math.round(c.space.spot.ft)}${c.space.spot.open ? '+' : ''} ft ${c.space.spot.side}`
         : c?.space && plan.spot && plan.spot.side === id ? 'Ground in front of the open wall'
         : c?.space ? 'No open wall here'

@@ -35,7 +35,8 @@ function liveMessage(m: FastMetrics | null, good: number, step: CheckedStep): { 
   if (m.luma < 45) return { tone: 'adjust', text: step === 'breaker' || step === 'rating' ? 'Too dark — turn on a light.' : 'Too dark — try in daylight.' };
   if (m.motion > 6) return { tone: 'adjust', text: 'Hold steady.' };
   if (m.relSharpness < 0.6 || m.sharpness < 150) return { tone: 'adjust', text: step === 'rating' ? 'Hold steady — let it focus.' : 'Hold steady a moment.' };
-  return good >= 6 ? { tone: 'ready', text: READY[step] } : { tone: 'hold', text: 'Hold steady.' };
+  // For the rating we can't tell live whether the number is in the box, so don't show a green "ready".
+  return good >= 6 ? { tone: step === 'rating' ? 'hold' : 'ready', text: READY[step] } : { tone: 'hold', text: 'Hold steady.' };
 }
 
 export function CheckedCapture({ camera, step, sample, extra, canUse = true, onAccept }: Props) {
