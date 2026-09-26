@@ -10,6 +10,7 @@
     "test": "vitest run",
     "postinstall": "node scripts/copy-vendor.mjs",
     "eval:meter": "node scripts/eval-meter.ts",
+    "eval:wall": "node scripts/eval-wall.ts",
     "dev:https": "vite --host 0.0.0.0 --mode https"
   },
   "dependencies": {

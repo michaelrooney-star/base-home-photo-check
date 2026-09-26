@@ -70,3 +70,12 @@
 .space-limited{margin-top:12px;display:grid;gap:8px}
 .space-limited p{margin:0;font-size:13px;display:flex;align-items:center;gap:6px}
 .space-limited .button{width:100%}
+.space-strip{position:absolute;height:24px;z-index:2;pointer-events:none}
+.space-strip>span{position:absolute;top:0;bottom:0;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.space-strip em{font-style:normal;font-size:11px;font-weight:600;white-space:nowrap;padding:0 4px;color:#fff;text-shadow:0 1px 2px #0008}
+.space-block{background:repeating-linear-gradient(135deg,#c2410cd0 0 6px,#9a3412d0 6px 12px)}
+.space-open{background:#15803dd9;box-shadow:0 0 0 2px #fff}
+.see-past{margin:10px 0 0;font-size:13px;display:flex;gap:6px;align-items:flex-start;color:#7c4a03}
+.not-needed{color:#6b7280}
+.wall-steps li.skipped{opacity:.55;text-decoration:line-through}
+.space-summary{display:flex;gap:8px;align-items:flex-start;margin:0 0 16px;padding:10px 12px;border-radius:10px;background:#f1f5ef;font-size:14px}

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Check, CircleAlert, CircleCheck, ImagePlus, Loader2, MapPin, RotateCcw, Send, Upload, ZoomOut } from 'lucide-react';
-import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, type ModelState } from '../lib/meter/analyzer';
+import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, prewarmDetector, type ModelState } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
 import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
 import { guideWall, spaceLimitedOnly, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
 import { WALL_CRITERIA, WALL_MESSAGES, WALL_SEQUENCE, type SceneClass, type WallMode } from '../lib/wall/criteria';
-import { analyzeWallPhoto, decide, spotFromTap, type WallAnalysis } from '../lib/wall/locate';
+import { analyzeWallPhoto, decide, measureSpace, spotFromTap, withRuler, type WallAnalysis } from '../lib/wall/locate';
+import { customerSpaceText, type SpaceFinding } from '../lib/wall/space';
+import { cantSeePast, summarizeSpace } from '../lib/wall/survey';
 import type { useCamera } from '../lib/useCamera';
 import type { Photo } from '../lib/photos';
 
 /** `done`: which of the three wall photos already have an accepted photo (for the progress strip). */
-type Props = { camera: ReturnType<typeof useCamera>; sample: string; mode: WallMode; done: Record<WallMode, boolean>; onAccept: (p: Photo) => void };
+type Props = { camera: ReturnType<typeof useCamera>; sample: string; mode: WallMode; done: Record<WallMode, boolean>; skipped?: WallMode[]; spotKnown?: boolean; onAccept: (p: Photo) => void };
 const MODE_LABEL: Record<WallMode, string> = { wall: 'Whole wall', right: 'Right of meter', left: 'Left of meter' };
 type Still = { url: string; source: Photo['source'] };
 type Phase = 'live' | 'checking' | 'confirm' | 'tap' | 'result';
@@ -24,13 +26,14 @@ function containRect(box: { w: number; h: number }, img: { w: number; h: number 
   return { x: (box.w - w) / 2, y: (box.h - h) / 2, w, h };
 }
 
-export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
+export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnown = false, onAccept }: Props) {
   const [phase, setPhase] = useState<Phase>('live');
   const [still, setStill] = useState<Still | null>(null);
   const [analysis, setAnalysis] = useState<WallAnalysis | null>(null);
   const [spot, setSpot] = useState<MeterSpot | null>(null);
   const [cursor, setCursor] = useState({ x: 0.5, y: 0.5 });
   const [decision, setDecision] = useState<WallDecision | null>(null);
+  const [space, setSpace] = useState<SpaceFinding | null>(null);
   const [rejections, setRejections] = useState(0);
   const [guidance, setGuidance] = useState<WallGuidance | null>(null);
   const [error, setError] = useState('');
@@ -46,6 +49,7 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
 
   useEffect(() => {
     void prewarmAnalyzer().catch(() => undefined);
+    void prewarmDetector();
     const off = onModelStatus(s => setModels({ subject: s.subject, error: s.error }));
     return () => { off(); run.current++; const s = stillRef.current; if (s?.url.startsWith('blob:')) URL.revokeObjectURL(s.url); };
   }, []);
@@ -59,11 +63,13 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
     if (video.current && phase === 'live') { video.current.srcObject = camera.stream; if (camera.stream) void video.current.play().catch(() => undefined); }
   }, [camera.stream, phase]);
 
-  const finish = useCallback((a: WallAnalysis, meter: MeterSpot | null) => {
+  const finish = useCallback((a: WallAnalysis, picked: MeterSpot | null) => {
+    const meter = withRuler(a, picked);
     const d = decide(a, meter, mode);
-    setSpot(meter); setDecision(d); setPhase('result');
+    const f = meter ? measureSpace(a, meter, mode) : null;
+    setSpot(meter); setDecision(d); setSpace(f); setPhase('result');
     if (!d.accepted) setRejections(n => n + 1);
-    if (debug) setDebugInfo(i => ({ ...i, meter, estimate: d.estimate }));
+    if (debug) setDebugInfo(i => ({ ...i, meter, estimate: d.estimate, space: f && { spot: f.spot, stretches: f.stretches.map(x => `${x.side} ${x.ft?.toFixed(1)} ft`), blockers: f.blockers.map(b => b.name) } }));
   }, [mode]);
 
   const check = useCallback(async (s: Still) => {
@@ -146,16 +152,18 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
     setDecision(d);
     if (debug) setDebugInfo(i => ({ ...i, limitedSpace: true }));
   }
-  function retake() { run.current++; setAnalysis(null); setDecision(null); setSpot(null); setOwnedStill(null); setGuidance(null); setPhase('live'); }
+  function retake() { run.current++; setAnalysis(null); setDecision(null); setSpace(null); setSpot(null); setOwnedStill(null); setGuidance(null); setPhase('live'); }
   function use(override = false) {
     if (!still || !decision) return;
     const s = still; stillRef.current = null; setStill(null);
     const est = decision.estimate;
+    const summary = space ? summarizeSpace(space) : undefined;
     const details = [
-      decision.limitedSpace ? 'Limited space — customer couldn’t step back further' : null,
-      est && mode === 'wall' ? `About ${Math.round(est.leftFt)} ft of wall visible left of the meter and ${Math.round(est.rightFt)} ft right (estimate)` : null,
-    ].filter(Boolean).join('. ');
-    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(decision.limitedSpace ? { limitedSpace: true } : {}), ...(details ? { details } : {}) } });
+      decision.limitedSpace ? 'Limited space — customer couldn’t step back further.' : null,
+      summary?.text ?? null,
+      est && mode === 'wall' ? `Photo shows about ${Math.round(est.leftFt)} ft left of the meter and ${Math.round(est.rightFt)} ft right (frame width, estimate).` : null,
+    ].filter(Boolean).join(' ');
+    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(decision.limitedSpace ? { limitedSpace: true } : {}), ...(summary ? { space: summary } : {}), ...(details ? { details } : {}) } });
   }
 
   const tone = guidance?.tone ?? 'search';
@@ -163,11 +171,12 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
   const ring = (s: { x: number; y: number; r: number | null } | null, cls: string) => s && photoRect &&
     <span className={`meter-pin ${cls}`} style={{ left: photoRect.x + s.x * photoRect.w, top: photoRect.y + s.y * photoRect.h, width: Math.max(36, (s.r ?? 0.03) * 2.6 * photoRect.h), height: Math.max(36, (s.r ?? 0.03) * 2.6 * photoRect.h) }} aria-hidden="true" />;
   const d = decision, est = d?.estimate;
+  const seePast = d?.accepted && space && !spotKnown ? cantSeePast(space) : null;
 
   return <>
     <ol className="wall-steps" aria-label="Meter wall photos">
-      {WALL_SEQUENCE.map((m, i) => <li key={m} className={m === mode ? 'current' : done[m] ? 'done' : ''} aria-current={m === mode ? 'step' : undefined}>
-        <b>{done[m] && m !== mode ? <Check size={12} /> : i + 1}</b>{MODE_LABEL[m]}</li>)}
+      {WALL_SEQUENCE.map((m, i) => <li key={m} className={m === mode ? 'current' : done[m] ? 'done' : skipped.includes(m) ? 'skipped' : ''} aria-current={m === mode ? 'step' : undefined}>
+        <b>{done[m] && m !== mode ? <Check size={12} /> : i + 1}</b>{MODE_LABEL[m]}{skipped.includes(m) && !done[m] && m !== mode && <small> · not needed</small>}</li>)}
     </ol>
     <div ref={frame} className={`camera-frame wall-frame ${phase !== 'live' ? 'has-photo' : ''} ${phase === 'tap' ? 'tapping' : ''} ${tone === 'ready' && phase === 'live' ? 'ready' : ''}`}
       onPointerUp={onTap} onKeyDown={onKey} tabIndex={phase === 'tap' ? 0 : -1} role={phase === 'tap' ? 'application' : undefined}
@@ -177,6 +186,10 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
         {phase === 'confirm' && ring(spot, 'proposed')}
         {phase === 'tap' && ring({ ...cursor, r: null }, 'cursor')}
         {phase === 'result' && ring(spot, d?.accepted ? 'good' : 'placed')}
+        {phase === 'result' && space && photoRect && <div className="space-strip" aria-hidden="true" style={{ left: photoRect.x, width: photoRect.w, top: photoRect.y + photoRect.h - 30 }}>
+          {space.blockers.filter(b => b.kind !== 'meter').map((b, i) => <span key={i} className="space-block" style={{ left: `${b.x0 * 100}%`, width: `${(b.x1 - b.x0) * 100}%` }}><em>{b.name}</em></span>)}
+          {space.spot && <span className="space-open" style={{ left: `${space.spot.x0 * 100}%`, width: `${(space.spot.x1 - space.spot.x0) * 100}%` }}><em>open wall</em></span>}
+        </div>}
       </> : camera.stream ? <>
         <video ref={video} autoPlay playsInline muted onLoadedData={() => setVideoReady(true)} aria-label="Live camera preview" />
         <div className="wall-guide" aria-hidden="true"><i /><i /><i /><i /><span>Keep the ground in view</span></div>
@@ -219,9 +232,10 @@ export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
     {phase === 'result' && d && <div className={`meter-result ${d.accepted ? 'accepted' : 'rejected'}`}>
       <div className="meter-result-head">{d.accepted ? <CircleCheck size={26} /> : <CircleAlert size={26} />}<div>
         <h3>{d.accepted ? (d.limitedSpace ? 'Photo accepted with a note' : 'Photo accepted') : 'Photo not accepted'}</h3>
-        <p>{d.accepted && d.limitedSpace ? 'We’ll let Base’s team know you couldn’t step back further. They’ll check the space from this photo and the side photos.' : d.accepted && mode !== 'wall' ? `The area to the ${mode} of your meter is in view.` : d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
+        <p>{d.accepted && d.limitedSpace ? 'We’ll let Base’s team know you couldn’t step back further. They’ll check the space from this photo and the side photos.' : d.accepted && space && !(spotKnown && mode !== 'wall' && !space.spot) ? customerSpaceText(space) : d.accepted && mode !== 'wall' ? `The area to the ${mode} of your meter is in view.` : d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
       </div></div>
-      <ul className="result-checks">{d.checks.filter(c => c.state !== 'skipped').map(c => <li key={c.id} className={c.state}>{c.state === 'pass' ? <Check size={15} /> : <CircleAlert size={15} />}<span><b>{c.label}</b>{c.state === 'fail' && c.message && c.message !== d.reasons[0] && <small>{c.message}</small>}</span></li>)}</ul>
+      <ul className="result-checks">{d.checks.filter(c => c.state !== 'skipped').map(c => <li key={c.id} className={c.state}>{c.state === 'pass' ? <Check size={15} /> : <CircleAlert size={15} />}<span><b>{c.label}</b></span></li>)}</ul>
+      {seePast && <p className="see-past"><ZoomOut size={14} /> {seePast}</p>}
       {still?.source === 'sample' && <p className="sample-disclaimer">Example from Base’s photo guide. This isn’t a photo of your home.</p>}
       <div className="confirm-actions">
         {d.accepted ? <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" onClick={() => use()}><Check size={17} /> Use this photo</button></>

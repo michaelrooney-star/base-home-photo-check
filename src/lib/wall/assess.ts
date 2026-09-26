@@ -42,7 +42,7 @@ export function decideWall(e: WallEvidence, mode: WallMode = 'wall'): WallDecisi
     ? (() => {
         if (!m) return check('direction', 'skipped');
         const pos = mode === 'right' ? m.x : 1 - m.x; // distance of the meter from the edge it should be near
-        return check('direction', pos <= C.maxSideMeterX ? 'pass' : 'fail', pos >= 1 - C.maxSideMeterX ? M.wrongSide[mode] : M.turnMore[mode]);
+        return check('direction', pos <= C.maxSideMeterX ? 'pass' : 'fail', pos >= C.wrongSideMeterX ? M.wrongSide[mode] : M.turnMore[mode]);
       })()
     : m && !waived
     ? (() => {
@@ -54,26 +54,36 @@ export function decideWall(e: WallEvidence, mode: WallMode = 'wall'): WallDecisi
   const ground = m ? check('ground', (est ? est.belowFt >= C.minBelowFeet : m.y <= C.maxMeterY) ? 'pass' : 'fail', M.ground) : check('ground', 'skipped');
   // "10 steps back" is a stand-in for coverage. If the photo measurably shows the wall beside the meter and the ground
   // (meter cover used as a ruler), it is far enough back, however big the meter looks. Without a scale we can't tell.
-  const covered = est != null && width.state === 'pass' && ground.state === 'pass';
+  // Side photos: the ruler gives a lower bound on the wall shown beyond the meter (the far wall looks smaller).
+  const pxPerFt = m?.r ? ((2 * m.r * e.height) / C.meterCoverInches) * 12 : null;
+  const sideFt = m && pxPerFt && mode !== 'wall' ? ((mode === 'right' ? 1 - m.x : m.x) * e.width) / pxPerFt : null;
+  const covered = (mode === 'wall' ? est != null : sideFt != null && sideFt >= C.minSideFeet) && width.state === 'pass' && ground.state === 'pass';
   const looksClose = closeup || (m?.r != null && 2 * m.r > C.maxMeterSize);
   const checks: WallCheck[] = [
     s.status !== 'ok' ? check('scene', 'skipped') : check('scene', s.probs.house_wall >= C.minHouseWall || closeup ? 'pass' : 'fail', sceneMessage(s)),
     check('meter', m ? 'pass' : 'fail', mode === 'wall' ? M.noMeter : M.sideNoMeter[mode]),
-    waived ? check('distance', 'skipped') : check('distance', covered || !looksClose ? 'pass' : 'fail', M.tooClose),
+    waived ? check('distance', 'skipped') : check('distance', covered || !looksClose ? 'pass' : 'fail', mode === 'wall' ? M.tooClose : M.sideTooClose[mode]),
     width,
     ground,
     check('orientation', e.width >= e.height ? 'pass' : 'fail', M.landscape),
     check('light', e.luma >= C.minLuma ? 'pass' : 'fail', M.dark),
     check('focus', e.sharpness >= C.minSharpness ? 'pass' : 'fail', M.blurry),
   ];
+  // One instruction: the most important fix first. "Step back" also fixes missing wall beside the meter or ground below it.
   const failed = checks.filter(c => c.state === 'fail');
-  return { accepted: failed.length === 0, checks, reasons: [...new Set(failed.map(c => c.message!))], estimate: est, limitedSpace: waived };
+  const ids = new Set(failed.map(c => c.id));
+  const wrongSide = width.id === 'direction' && width.state === 'fail' && width.message === M.wrongSide[mode as 'right' | 'left'];
+  const order = (c: WallCheck) => FIX_ORDER.indexOf(c.id === 'direction' && wrongSide ? 'wrongSide' : c.id);
+  const ranked = [...failed].sort((a, b) => order(a) - order(b)).filter(c => !(ids.has('distance') && (c.id === 'sides' || c.id === 'ground' || (c.id === 'direction' && !wrongSide))));
+  return { accepted: failed.length === 0, checks, reasons: [...new Set(ranked.map(c => c.message!))], estimate: est, limitedSpace: waived };
 }
+
+const FIX_ORDER = ['scene', 'meter', 'orientation', 'light', 'focus', 'wrongSide', 'distance', 'sides', 'direction', 'ground'];
 
 /** The photo failed only because the customer is too close / not enough wall beside the meter: offer "I can't step back any further". */
 export const spaceLimitedOnly = (d: WallDecision) => {
   const failed = d.checks.filter(c => c.state === 'fail').map(c => c.id);
-  return failed.length > 0 && failed.every(id => id === 'distance' || id === 'sides');
+  return failed.length > 0 && failed.every(id => id === 'distance' || id === 'sides' || id === 'direction') && !d.reasons.some(r => r.startsWith('This shows the area'));
 };
 
 export const wallInFocus = (m: FastMetrics) => m.sharpness >= C.minLiveSharpness && m.relSharpness >= C.minRelativeSharpness;

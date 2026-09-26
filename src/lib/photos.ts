@@ -1,7 +1,8 @@
+import { planWall, skippable, type SpaceSummary } from './wall/survey.ts';
 export type PhotoId = 'meter' | 'wall' | 'right' | 'left' | 'adjacent' | 'fence' | 'breaker' | 'rating';
 export type Answer = 'yes' | 'no' | 'unsure' | null;
 /** Result of the automatic meter-photo check. `override` = customer sent it anyway after rejections. */
-export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string; limitedSpace?: boolean };
+export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string; limitedSpace?: boolean; space?: SpaceSummary };
 export type Photo = { url: string; source: 'camera' | 'upload' | 'sample'; status: 'confirmed' | 'retake'; warnings: string[]; check?: PhotoCheck };
 export type Photos = Partial<Record<PhotoId, Photo>>;
 export type PhotoStep = { id: PhotoId; title: string; instruction: string; tip: string; sample: string };
@@ -19,8 +20,22 @@ export const STEPS: PhotoStep[] = [
 export function requiredSteps(fence: Answer) { return STEPS.filter(s => s.id !== 'fence' || fence === 'yes'); }
 export function completion(photos: Photos, fence: Answer, location: string) {
   const steps = requiredSteps(fence);
-  const complete = steps.filter(s => photos[s.id]?.status === 'confirmed').length;
+  const skip = skippable(photos) as PhotoId[];
+  const complete = steps.filter(s => photos[s.id]?.status === 'confirmed' || skip.includes(s.id)).length;
   return { total: steps.length, complete, ready: complete === steps.length && (fence === 'yes' || fence === 'no') && !!location };
+}
+/**
+ * The step after `current`. The meter-wall photos follow the survey plan (wall/survey.ts): look along the more
+ * promising side first and skip the other side once open wall is found.
+ */
+export function nextStep(current: PhotoId, photos: Photos, fence: Answer): PhotoId | null {
+  const order = STEPS.filter(s => s.id !== 'fence' || !(fence === 'no' || fence === 'unsure')).map(s => s.id);
+  if (current === 'wall' || current === 'right' || current === 'left') {
+    const todo = planWall(photos).todo.filter(s => s !== current);
+    if (current === 'wall' || todo.length) return todo[0] ?? 'adjacent';
+    return 'adjacent';
+  }
+  return order[order.indexOf(current) + 1] ?? null;
 }
 export function revokePhoto(photo?: Photo) { if (photo?.url.startsWith('blob:')) URL.revokeObjectURL(photo.url); }
 export async function inspectPhoto(url: string): Promise<string[]> {

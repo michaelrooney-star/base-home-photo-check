@@ -54,6 +54,17 @@ describe('decideWall', () => {
     expect(spaceLimitedOnly(decideWall({ ...good, meter: null }))).toBe(false);
     expect(spaceLimitedOnly(decideWall(good))).toBe(false);
   });
+  it('gives one instruction: step back, not step back AND turn / include more wall', () => {
+    const d = decideWall({ ...good, meter: { x: 0.5, y: 0.2, r: 0.08, source: 'auto' } });
+    expect(d.checks.filter(c => c.state === 'fail').map(c => c.id)).toEqual(['distance', 'sides']);
+    expect(d.reasons).toEqual([M.tooClose]);
+    // A dark photo: fix the light first.
+    expect(decideWall({ ...good, luma: 10, meter: { x: 0.5, y: 0.2, r: 0.08, source: 'auto' } }).reasons[0]).toBe(M.dark);
+  });
+  it('puts "wrong side" before "step back" on side photos', () => {
+    const e: WallEvidence = { ...good, meter: { x: 0.9, y: 0.4, r: 0.13, source: 'auto' } };
+    expect(decideWall(e, 'right').reasons[0]).toBe(M.wrongSide.right);
+  });
   it('asks for more wall on the short side', () => {
     expect(decideWall({ ...good, meter: { ...good.meter!, x: 0.1 } }).reasons).toContain(M.moreLeft);
     expect(decideWall({ ...good, meter: { ...good.meter!, x: 0.92 } }).reasons).toContain(M.moreRight);
@@ -86,8 +97,16 @@ describe('decideWall — side photos', () => {
     expect(decideWall(left, 'right').reasons).toEqual([M.wrongSide.right]);
     expect(decideWall(right, 'left').reasons).toEqual([M.wrongSide.left]);
   });
-  it('asks to turn further when the meter is near the middle', () => {
-    expect(decideWall({ ...right, meter: { ...right.meter!, x: 0.5 } }, 'right').reasons).toEqual([M.turnMore.right]);
+  it('accepts the meter anywhere on the near half, asks to turn when it is past the middle', () => {
+    expect(decideWall({ ...right, meter: { ...right.meter!, x: 0.5 } }, 'right').accepted).toBe(true);
+    expect(decideWall({ ...right, meter: { ...right.meter!, x: 0.68 } }, 'right').reasons).toEqual([M.turnMore.right]);
+  });
+  it('accepts a close side photo that still shows 3+ ft of wall beyond the meter (like 205 E Riverside)', () => {
+    // 2016×1512, meter at x 0.17 with a large cover: ~4.8 ft of wall to its right by the ruler.
+    const close: WallEvidence = { ...right, meter: { x: 0.17, y: 0.39, r: 0.067, source: 'auto' }, width: 2016, height: 1512 };
+    expect(decideWall(close, 'right').accepted).toBe(true);
+    // Same framing but with only ~2 ft beyond the meter: too close, one side-specific instruction.
+    expect(decideWall({ ...close, meter: { ...close.meter!, x: 0.55, r: 0.13 } }, 'right').reasons).toEqual([M.sideTooClose.right]);
   });
   it('needs the meter in the side photo, with side-specific wording', () => {
     expect(decideWall({ ...right, meter: null }, 'right').reasons).toEqual([M.sideNoMeter.right]);

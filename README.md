@@ -136,12 +136,19 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 | Phone held sideways | Landscape photo | "Turn your phone sideways…" |
 | Enough light / In focus | Brightness ≥ 45/255; sharpness ≥ 15 (lenient: wide shots have no small text) | "It's too dark…" / "The photo is blurry…" |
 
-**Right-side and left-side photos** use the same screen and pipeline, taken straight after the whole-wall photo, with a 1-2-3 progress strip. Base's samples look along the wall from about 10 steps back, with the meter near the edge of the frame. So:
+**Looking for battery space (the wall survey).** Base's list asks for a whole-wall photo, then right-of-meter and left-of-meter photos. What reviewers need is a set of conditions: the meter, a clear 3 ft stretch of wall within 20 ft of it, and the ground in front of that stretch (which the angled side photos show). So the app runs the side photos like a technician would (`src/lib/wall/survey.ts`):
 
-- the live view shows a dashed "Meter here" zone on the left (right-side photo) or right (left-side photo);
-- the photo is accepted when the meter is found or tapped within 40 % of that edge ("Shows the area to the right of the meter"), with the same distance, ground, orientation, light and focus checks;
-- a meter on the opposite side gets "This shows the area to the LEFT of your meter. Turn to face the area on its right side." A meter near the middle gets "Turn a little more to the right…";
-- no feet estimate is made, because the wall recedes at an angle.
+- After the whole-wall photo, an on-device object detector finds electrical boxes, cabinets, AC units, doors and windows, and a colour check finds tall plants at meter height. Using the meter cover as a ruler, the app measures the clear wall between them (`src/lib/wall/space.ts`). The result card says what it saw: "Good news: about 4+ ft of open wall to the left of your meter", or "There's an electrical box on the left and a large cabinet on the right of your meter. Next, we'll look along the wall for open space."
+- **Open wall found:** one side photo, facing along the wall toward it ("We spotted open wall to the left… so we can see the ground in front of it"). The other side is marked **Not needed**.
+- **Crowded:** the side with more clear wall comes first, with a specific instruction ("face along the wall to the left and step back so we can see past the electrical box"). If that side has no open wall either, the other side comes next. If neither does, the adjacent-wall step says "Your meter wall looks crowded. The wall around the nearest corner may have room."
+- Side photos are accepted when they show the area beside the meter: the meter on the near half of the frame and, by the ruler, at least 3 ft of wall beyond it. When a side photo can't see past what's in the way, the card adds a gentle tip ("step back or use the 0.5× lens"), but the photo is still accepted.
+- It never asks for more photos than Base's list, and often fewer. Reviewers get a one-line summary on the Review page, e.g. "Possible battery spot: about 4+ ft of clear wall left of the meter (whole-wall photo)."
+
+**One instruction per rejection.** When several checks fail, the customer sees only the most important fix. "Step back" also covers "include more wall" and "include the ground", so they aren't listed as separate, conflicting instructions.
+
+**Object detector.** YOLOE-11M (Ultralytics) with its text prompts baked in, pruned to the detection output and int8-quantized: `public/models/wall-objects.onnx`, about 21 MB, self-hosted, run in the analyzer worker on ONNX Runtime WebAssembly (about 0.5 s on a laptop). It is rebuilt with `scripts/export-wall-detector.py`, which downloads weights from GitHub releases, not Hugging Face. Labels are grouped because the model confuses them (a grey cabinet can score as "gas meter"). **It never claims a gas meter.** The detector also helps pick the meter: circles inside a detected meter rank first, and if the "cover" is implausibly small for the meter's enclosure (a round digit in the house number), the ruler is re-sized from the enclosure. `?objects=off` turns the detector off. Without it, the flow falls back to Base's fixed order.
+
+**License note:** Ultralytics YOLOE is AGPL-3.0. That's fine for a hackathon demo. A production version needs an Ultralytics enterprise licence or a differently licensed detector.
 
 **Tight spaces.** Many homeowners can't step back 10 steps (side yards, fences, narrow paths). The app handles this three ways:
 
@@ -151,7 +158,7 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 
 **Distance estimates** use the meter's glass cover (about 7 in across on US socket meters) as a ruler. For example: "About 6 ft of wall shows left of the meter and 7 ft to the right." That's roughly ±30 %, so it's shown as an estimate and saved with the photo for Base's reviewers, and only a very short side (< 3 ft) is rejected.
 
-**Testing:** `?scene=house_wall|meter_closeup|indoors|other|off` fakes the scene classifier; `?debug=1` shows candidates, scores and estimates. `src/lib/wall/circles.test.ts` checks the circle search against Base's guide photos in `eval/wall`.
+**Testing:** `npm run eval:wall` runs the meter search, detector, clear-space check and decision in Node on `eval/wall/real`: 10 real photos from 203 and 205 E Riverside, Austin, including close-ups and an irrigation controller. `npm run eval:wall -- eval/wall` does the same on Base's guide samples. `?scene=house_wall|meter_closeup|indoors|other|off` fakes the scene classifier; `?debug=1` shows candidates, scores and estimates. `src/lib/wall/circles.test.ts` checks the circle search against Base's guide photos in `eval/wall`.
 
 **Known limits:**
 
@@ -199,13 +206,14 @@ Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-
 - `src/components/GuidedCapture.tsx`: camera, upload, samples, drafts, confirmation, safety, and conditional fence prompt.
 - `src/components/MeterCapture.tsx`: the meter step — live guidance overlay, auto-capture, accept/reject result.
 - `src/components/WallCapture.tsx`: the three meter-wall steps (whole wall, right, left) — live guidance, meter confirm/tap, accept/reject result.
-- `src/lib/wall/`: `criteria.ts` (rules, prompts, copy), `assess.ts` (live instruction and decision), `circles.ts` (OpenCV meter-cover search), `locate.ts` (photo pipeline).
+- `src/lib/wall/`: `criteria.ts` (rules, prompts, copy), `assess.ts` (live instruction and decision), `circles.ts` (OpenCV meter-cover search), `objects.ts` (object detector input/output), `space.ts` (clear wall beside the meter), `survey.ts` (which side photo next, what's not needed), `locate.ts` (photo pipeline).
+- `scripts/eval-wall.ts`: runs the wall pipeline in Node on real photos; `scripts/export-wall-detector.py` rebuilds the detector model.
 - `src/lib/meter/`: meter photo check — `criteria.ts` (rules and copy), `guidance.ts` (live instruction), `acceptance.ts` (accept/reject), `number.ts` (pick the meter number from OCR lines), `image.ts` / `metrics.ts` (image measurements), `frames.ts` (camera/photo plumbing), `analyzer.ts` + `analyzer.worker.ts` + `clip.ts` (on-device models).
 - `scripts/eval-meter.ts`: runs the meter check in Node against labeled photos.
 - `src/components/PhotoChecklist.tsx`: capture progress and navigation.
 - `src/components/OptionalEstimate.tsx`: separate gated manual point-selection workflow.
 - `src/components/Review.tsx`: evidence review, observations, and result states.
-- `src/lib/useCamera.ts`: camera lifecycle and cancellation.
+- `src/lib/useCamera.ts` + `src/lib/lens.ts`: camera lifecycle, cancellation and the 0.5× lens toggle.
 - `src/lib/photos.ts`: checklist, completion, and local quality heuristics.
 - `src/lib/estimate.ts`: conservative geometry validation, runtime loading, and OpenCV memory cleanup.
 

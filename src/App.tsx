@@ -3,7 +3,7 @@ import { ArrowUpRight, Check, LockKeyhole } from 'lucide-react';
 import { Welcome } from './components/Welcome';
 import { GuidedCapture } from './components/GuidedCapture';
 import { Review } from './components/Review';
-import { completion, revokePhoto, STEPS, type Answer, type Notes, type Photo, type PhotoId, type Photos } from './lib/photos';
+import { completion, nextStep, revokePhoto, STEPS, type Answer, type Notes, type Photo, type PhotoId, type Photos } from './lib/photos';
 import { useCamera } from './lib/useCamera';
 import type { EstimateResult } from './lib/estimate';
 export default function App() {
@@ -20,9 +20,8 @@ export default function App() {
   function select(id:PhotoId){setCurrent(id);window.scrollTo({top:0,behavior:'instant'});}
   function next(){
     if(returnToReview){setReturnToReview(false);navigate('review');return;}
-    let idx=STEPS.findIndex(s=>s.id===current)+1;
-    if(STEPS[idx]?.id==='fence'&&(fenceRef.current==='no'||fenceRef.current==='unsure'))idx++;
-    if(idx>=STEPS.length){navigate('review');return;}select(STEPS[idx].id);
+    const to=nextStep(current,photoRef.current,fenceRef.current);
+    if(!to){navigate('review');return;}select(to);
   }
   function retake(id:PhotoId){const p=photoRef.current[id];if(p){const next={...photoRef.current,[id]:{...p,status:'retake' as const}};photoRef.current=next;setPhotos(next);}setEstimate(null);setCurrent(id);setReturnToReview(true);navigate('capture');}
   function mark(id:PhotoId,status:'confirmed'|'retake'){const p=photoRef.current[id];if(!p)return;const next={...photoRef.current,[id]:{...p,status}};photoRef.current=next;setPhotos(next);}

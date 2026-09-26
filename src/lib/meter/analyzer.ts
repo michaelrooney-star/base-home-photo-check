@@ -60,7 +60,7 @@ export function onModelStatus(l: (s: Status) => void) { listeners.add(l); l({ ..
 let worker: Worker | null = null;
 let ocrReady: Promise<void> | null = null;
 let nextId = 0;
-type WorkerResult = { lines?: OcrLine[]; ocrError?: string; logits?: number[] | number[][]; subjectError?: string; error?: string };
+type WorkerResult = { lines?: OcrLine[]; ocrError?: string; logits?: number[] | number[][]; subjectError?: string; error?: string; output?: Float32Array; anchors?: number };
 const pending = new Map<number, (r: WorkerResult) => void>();
 
 export function prewarmAnalyzer(): Promise<void> {
@@ -73,7 +73,7 @@ export function prewarmAnalyzer(): Promise<void> {
       else if (m.type === 'ocr-error') { status.ocr = 'failed'; status.error = m.error; emit(); reject(new Error(m.error)); }
       else if (m.type === 'subject-ready') { status.subject = 'ready'; emit(); }
       else if (m.type === 'subject-error') { status.subject = 'failed'; status.error = m.error; emit(); console.warn('[meter] subject classifier failed to load:', m.error); }
-      else if (m.type === 'result' || m.type === 'classified') { const done = pending.get(m.id); pending.delete(m.id); done?.(m); }
+      else if (m.type === 'result' || m.type === 'classified' || m.type === 'detected') { const done = pending.get(m.id); pending.delete(m.id); done?.(m); }
     };
     worker.onerror = e => { status.ocr = 'failed'; status.error = e.message || 'worker error'; emit(); reject(new Error(status.error)); };
     const params = new URLSearchParams(location.search);
@@ -136,4 +136,31 @@ export async function classifyImages<C extends string>(images: ImageData[], set:
   });
   if (!r.logits) return null;
   return (r.logits as number[][]).map(l => scoreSet<C>(set, l));
+}
+
+const DETECTOR_URL = () => new URL('/models/wall-objects.onnx', location.href).href;
+const detectorOff = () => typeof location !== 'undefined' && new URLSearchParams(location.search).get('objects') === 'off';
+
+/** Starts downloading the wall object detector (~21 MB, cached by the browser) before it's needed. */
+export async function prewarmDetector() {
+  if (detectorOff()) return;
+  await prewarmAnalyzer().catch(() => undefined);
+  worker?.postMessage({ type: 'detect-init', modelUrl: DETECTOR_URL() });
+}
+
+/**
+ * Runs the wall object detector on `img` (already resized to the letterbox size). Returns the raw output, or null if
+ * the detector is off or failed (callers then skip the clear-space check).
+ */
+export async function detectObjects(img: ImageData, lb: import('../wall/objects.ts').Letterbox): Promise<{ output: Float32Array; anchors: number } | null> {
+  if (detectorOff()) return null;
+  await prewarmAnalyzer().catch(() => undefined);
+  if (!worker) return null;
+  const id = nextId++, data = new Uint8ClampedArray(img.data);
+  const r = await new Promise<WorkerResult>(resolve => {
+    pending.set(id, resolve);
+    worker!.postMessage({ type: 'detect', id, modelUrl: DETECTOR_URL(), lb, data }, [data.buffer]);
+  });
+  if (!r.output || !r.anchors) { console.warn('[wall] object detection failed:', r.error); return null; }
+  return { output: r.output, anchors: r.anchors };
 }

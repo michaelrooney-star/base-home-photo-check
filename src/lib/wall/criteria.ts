@@ -47,8 +47,10 @@ export const WALL_CRITERIA = {
   maxMeterSize: 0.12,
   /** Meter centre must be at least this share of the photo width from each side edge. */
   minSideMargin: 0.2,
-  /** Side photos: the meter should sit in the outer part of the frame (right-side photo: left ≤ 40 %; left-side: mirror). */
-  maxSideMeterX: 0.4,
+  /** Side photos: the meter should be on the near half of the frame (right-side photo: left ≤ 60 %; left-side: mirror)… */
+  maxSideMeterX: 0.6,
+  /** …and past this it's the wrong side altogether. */
+  wrongSideMeterX: 0.75,
   /** When the scale is known: minimum wall visible on each side of the meter, feet. */
   minSideFeet: 3,
   /** When the scale is known: ground must be at least this far below the meter centre to be in frame, feet (meters sit ~4–5 ft up; this leaves margin for the estimate). */
@@ -106,19 +108,23 @@ export const WALL_MESSAGES = {
   // side photos (right / left of the meter)
   sidePoint: { right: 'Stand about 10 steps back and face the area to the right of your meter.', left: 'Stand about 10 steps back and face the area to the left of your meter.' },
   sideReady: {
-    right: 'Looks good — take the photo with your meter near the left edge and the wall and yard to its right in view.',
-    left: 'Looks good — take the photo with your meter near the right edge and the wall and yard to its left in view.',
+    right: 'Looks good — take the photo with your meter on the left and the wall and ground to its right in view.',
+    left: 'Looks good — take the photo with your meter on the right and the wall and ground to its left in view.',
   },
   sideNoMeter: {
     right: 'Keep your meter in the photo, near the left edge, so we can see where the area to its right begins.',
     left: 'Keep your meter in the photo, near the right edge, so we can see where the area to its left begins.',
+  },
+  sideTooClose: {
+    right: 'You’re too close. Step back so we can see more of the wall and ground to the right of your meter.',
+    left: 'You’re too close. Step back so we can see more of the wall and ground to the left of your meter.',
   },
   wrongSide: {
     right: 'This shows the area to the LEFT of your meter. Turn to face the area on its right side.',
     left: 'This shows the area to the RIGHT of your meter. Turn to face the area on its left side.',
   },
   turnMore: {
-    right: 'Turn a little more to the right, so the meter sits near the left edge and the photo shows the area beside it.',
-    left: 'Turn a little more to the left, so the meter sits near the right edge and the photo shows the area beside it.',
+    right: 'Turn a little to the right, so the meter is on the left side of the photo and we can see the area beside it.',
+    left: 'Turn a little to the left, so the meter is on the right side of the photo and we can see the area beside it.',
   },
 } as const;

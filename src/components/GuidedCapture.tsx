@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Camera, Check, ImagePlus, Lightbulb, RotateCcw, ShieldCheck, Upload, X } from 'lucide-react';
+import { planWall, skippable } from '../lib/wall/survey';
 import { inspectPhoto, revokePhoto, STEPS, type Answer, type Photo, type PhotoId, type Photos } from '../lib/photos';
 import { PhotoChecklist } from './PhotoChecklist';
 import { MeterCapture } from './MeterCapture';
@@ -29,10 +30,12 @@ export function GuidedCapture(p: Props) {
   }
   function accept(){ if(!draft)return;const accepted=draft;draftRef.current=null;setDraft(null);p.onSave(p.current,accepted);p.onNext(); }
   const fenceQuestion=p.current==='fence' && p.fence!=='yes';
+  const plan=planWall(p.photos);
+  const hint=p.current==='right'||p.current==='left'||p.current==='adjacent' ? plan.hints[p.current] : undefined;
   return <div className="capture-layout"><PhotoChecklist photos={p.photos} fence={p.fence} current={p.current} onSelect={p.onSelect}/><section className="capture-main"><div className="capture-topbar"><button className="text-button" onClick={p.onBack}><ArrowLeft size={16}/> Back</button><button className="text-button" onClick={p.onReview}>Review photos <ArrowRight size={16}/></button></div>
     {fenceQuestion ? <div className="fence-question"><span className="section-icon"><ImagePlus size={25}/></span><div className="eyebrow">A QUICK CHECK</div><h1>Is there a fence along your meter wall?</h1><p>If there is, we’ll need one photo of the area behind it.</p><div className="choice-row">{(['yes','no','unsure'] as const).map(v=><button className="button" key={v} onClick={()=>{p.onFence(v);if(v!=='yes')p.onNext();}}>{v==='yes'?'Yes, there is':v==='no'?'No fence':'Not sure'}</button>)}</div><p className="muted">Only enter an area you can safely access.</p></div> : <>
-      <div className="eyebrow">PHOTO {String(STEPS.filter(s=>s.id!=='fence'||p.fence!=='no').findIndex(s=>s.id===p.current)+1).padStart(2,'0')} <span className="eyebrow-rule"/> {draft ? 'CHECK YOUR PHOTO' : 'ONE PHOTO AT A TIME'}</div><h1 className="capture-title">{step.title}<span className="red-dot">.</span></h1><p className="capture-instruction">{step.instruction}</p>
-      {p.current==='meter' ? <MeterCapture camera={p.camera} onAccept={photo=>{p.onSave('meter',photo);p.onNext();}}/> : (p.current==='wall'||p.current==='right'||p.current==='left') ? <WallCapture key={p.current} mode={p.current} done={{wall:p.photos.wall?.status==='confirmed',right:p.photos.right?.status==='confirmed',left:p.photos.left?.status==='confirmed'}} camera={p.camera} sample={step.sample} onAccept={photo=>{const id=p.current;p.onSave(id,photo);p.onNext();}}/> : <>
+      <div className="eyebrow">PHOTO {String(STEPS.filter(s=>s.id!=='fence'||p.fence!=='no').findIndex(s=>s.id===p.current)+1).padStart(2,'0')} <span className="eyebrow-rule"/> {draft ? 'CHECK YOUR PHOTO' : 'ONE PHOTO AT A TIME'}</div><h1 className="capture-title">{step.title}<span className="red-dot">.</span></h1><p className="capture-instruction">{hint ?? step.instruction}</p>
+      {p.current==='meter' ? <MeterCapture camera={p.camera} onAccept={photo=>{p.onSave('meter',photo);p.onNext();}}/> : (p.current==='wall'||p.current==='right'||p.current==='left') ? <WallCapture key={p.current} mode={p.current} done={{wall:p.photos.wall?.status==='confirmed',right:p.photos.right?.status==='confirmed',left:p.photos.left?.status==='confirmed'}} skipped={skippable(p.photos)} spotKnown={!!plan.spot && plan.spot.photo!==p.current} camera={p.camera} sample={step.sample} onAccept={photo=>{const id=p.current;p.onSave(id,photo);p.onNext();}}/> : <>
       {p.current==='rating' && <div className="safety-notice"><ShieldCheck size={20}/><p>{step.tip} Never touch wires or electrical components.</p></div>}
       {p.current==='breaker' && <div className="location-field"><label htmlFor="breaker-location">Where is your main breaker box?</label><select id="breaker-location" value={p.location} onChange={e=>p.onLocation(e.target.value)}><option value="">Choose a location</option><option value="outside">Outside</option><option value="garage">Garage</option><option value="closet">Closet</option><option value="not sure">Not sure</option></select></div>}
       <div className={`camera-frame ${draft?'has-photo':''}`}>
