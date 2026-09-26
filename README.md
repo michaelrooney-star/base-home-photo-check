@@ -116,3 +116,46 @@ Icons: Lucide (ISC). OpenCV.js: OpenCV Apache-2.0 distribution via `@techstark/o
 ## Validation and limits
 
 `npm run build` checks all TypeScript and bundles the app. `npm test` checks conditional checklist completion, missing/retake evidence, observation requirements, rejection of invalid geometry, and synthetic known distances through the actual OpenCV runtime. Synthetic test dimensions are mathematical fixtures, not dimensions assigned to a real meter. Browser walkthroughs cover samples, review/retake, safe skip, measurement gating, local file selection, and narrow-screen layout. Physical rear-camera hardware and individual mobile browsers require real-device testing.
+
+---
+
+## PermitGraph (Track 2) — M0–M4 demo
+
+The member app at `/` remains unchanged. PermitGraph adds Ops/Admin surfaces and a single Hono API:
+
+- `/ops/:userId` — Ops queue and Case detail (Why? panel)
+- `/admin` — Admin harness (reset, inject failures, change sim hooks)
+- API: `/api/ops/*`, `/api/admin/*` — one Hono catch‑all with a shared in‑memory demo store
+
+Run locally:
+
+```sh
+npm install
+npm run dev
+# Web: http://localhost:5173
+# API: proxied at /api/* (origin http://localhost:8787)
+```
+
+Build and tests:
+
+```sh
+npm test
+npm run build
+```
+
+Demo users:
+
+- `ops_maya`, `ops_sam` (different seeded queues)
+
+Demo script (happy path + failure + conflict + gap):
+
+1. Case A — Austin happy: Open `/ops/ops_maya`, pick an Austin case → Plan → Status: Ops‑ready; Why? shows seed citations (high‑level, no invented setbacks).
+2. Case B — Utility fail: In `/admin`, enable “Kill utility worker” → Plan on any non‑Waco case → retries→fallback → Status: Ops‑ready · degraded.
+3. Case C — Fire conflict: In `/admin`, enter the Case ID (short or full) → “Mark conflict” → Plan → Status: Needs review.
+4. Waco — Open a Waco case → Pack: `UNKNOWN_PACK` → Status: Unknown (knowledge gap).
+
+Vercel caveats:
+
+- Single serverless function `api/[[...route]].ts` handles all `/api/*`. Ops/Admin share one in‑memory Map (clears on redeploy/cold start).
+- `vercel.json` rewrites `/ops/*` and `/admin/*` to the SPA entry.
+- No claims of legal “approval” or “permitting”; statuses are limited to Ops‑ready / Needs review / Blocked / Unknown.
