@@ -8,20 +8,30 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
-    "postinstall": "node scripts/copy-opencv.mjs"
+    "postinstall": "node scripts/copy-vendor.mjs",
+    "eval:meter": "node scripts/eval-meter.ts",
+    "dev:https": "vite --host 0.0.0.0 --mode https"
   },
   "dependencies": {
+    "@gutenye/ocr-common": "^1.4.9",
+    "@gutenye/ocr-models": "^1.4.2",
+    "@huggingface/transformers": "^4.3.0",
     "@techstark/opencv-js": "^4.11.0-release.1",
     "lucide-react": "^0.468.0",
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@gutenye/ocr-node": "^1.4.9",
     "@tailwindcss/vite": "^4.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^4.4.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
     "tailwindcss": "^4.1.0",
     "typescript": "~5.8.3",
     "vite": "^6.3.0",

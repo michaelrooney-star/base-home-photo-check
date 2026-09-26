@@ -14,23 +14,27 @@ npm run dev
 Open the Local URL Vite prints (normally `http://localhost:5173`).
 
 ```sh
-npm run build   # TypeScript checks and production build
-npm test        # Evidence-completeness rules and real OpenCV geometry checks
+npm run build       # TypeScript checks and production build
+npm test            # Unit tests: meter acceptance rules, live guidance, number picking, checklist, geometry
 npm run preview
+npm run eval:meter  # Meter photo check against labeled photos in eval/meter (add -- --subject to include the classifier)
+npm run dev:https   # HTTPS dev server (self-signed) so a phone on the same Wi-Fi can use its camera
 ```
 
-The install script copies the pinned OpenCV.js package into `public/vendor/opencv.js`. It is loaded from the same origin only when the optional estimate is requested. Keep `package-lock.json`; use `npm ci` for repeatable installation. The OpenCV runtime is relatively large and is deliberately excluded from the initial JavaScript bundle.
+The install script copies the pinned OpenCV.js package into `public/vendor/opencv.js`, and the on-device models for the meter step (ONNX Runtime WebAssembly and PaddleOCR) into `public/vendor/ort` and `public/vendor/paddle`. It is loaded from the same origin only when the optional estimate is requested. Keep `package-lock.json`; use `npm ci` for repeatable installation. The OpenCV runtime is relatively large and is deliberately excluded from the initial JavaScript bundle.
 
-A phone camera requires a secure context (HTTPS, or localhost on the phone itself). A plain LAN `http://` address may not expose camera APIs; uploads and labeled samples still work. The app requests the rear-facing camera with an `ideal` constraint and uses whichever camera the browser makes available.
+A phone camera requires a secure context (HTTPS, or localhost on the phone itself). A plain LAN `http://` address may not expose camera APIs; uploads and labeled samples still work. Use `npm run dev:https`, open the `https://<your-laptop-ip>:5173` address on the phone, and accept the self-signed certificate warning. The app requests the rear-facing camera with an `ideal` constraint and uses whichever camera the browser makes available.
 
 ## Demo flow
 
 1. Tap **Start**. This is the first point at which camera access is requested.
-2. Capture one still photo at a time, choose a local image, or select **Use sample photo**. No video is recorded. Confirm readability manually; retake any uncertain image.
-3. Answer the fence question. “Yes” adds the behind-fence photo; “no” removes it; “not sure” leaves the final summary incomplete until resolved. Select the breaker location, including “not sure” if needed.
-4. The rating step includes a safe skip option. Skipping never creates a completed photo.
-5. Review thumbnails, mark images readable or flag a retake, and add optional solar/obstruction notes.
-6. Finish to view **Ready for Base team review.** or **A few more photos would help.** These are local demo summaries, not a submission to Base. Samples remain conspicuously labeled and cannot represent the homeowner's actual property.
+2. **Meter number:** fit the meter inside the circle and follow the on-screen instruction. The app takes the photo automatically once it can read the meter number, then accepts or rejects it with a reason (see [Meter photo check](#meter-photo-check)). Upload and **Try sample photo** go through the same check.
+3. **Whole meter wall:** follow the live instruction (phone sideways, step back, hold steady) and take the photo. The app finds the meter, asks "Is this your electric meter?" (or asks you to tap it), then accepts or rejects the photo (see [Whole meter wall check](#whole-meter-wall-check)).
+4. Other photos: capture one still photo at a time, choose a local image, or select **Use sample photo**. No video is recorded. Confirm readability manually; retake any uncertain image.
+5. Answer the fence question. “Yes” adds the behind-fence photo; “no” removes it; “not sure” leaves the final summary incomplete until resolved. Select the breaker location, including “not sure” if needed.
+6. The rating step includes a safe skip option. Skipping never creates a completed photo.
+7. Review thumbnails, mark images readable or flag a retake, and add optional solar/obstruction notes.
+8. Finish to view **Ready for Base team review.** or **A few more photos would help.** These are local demo summaries, not a submission to Base. Samples remain conspicuously labeled and cannot represent the homeowner's actual property.
 
 The welcome-screen 5–10-minute duration is an illustrative estimate for the demo, not a Base-published service promise.
 
@@ -59,14 +63,88 @@ The electrical/spacing article is background for Base's review, **not an eligibi
 
 ## Photo handling and checks
 
-- React state and memory-only blob URLs hold images and answers. No login, database, cookies, localStorage, IndexedDB, service worker, analytics, Base API, image upload endpoint, or recording API is used.
+- React state and memory-only blob URLs hold images and answers. No login, database, cookies, localStorage, IndexedDB, service worker, analytics, Base API, image upload endpoint, or recording API is used. The meter step's classifier weights are downloaded once from Hugging Face and kept in the browser's Cache Storage; photos never leave the device.
 - “Upload photo” means read a file from this device into the browser, not upload it to a server. Leaving/reloading the page loses the session. Sample images and the OpenCV script are ordinary static assets.
 - Camera tracks stop when leaving the capture flow, choosing a file/sample, hiding the page, or unmounting. A delayed permission result is invalidated and immediately stopped if the user has already left.
 - Replaced/abandoned blob URLs are revoked; photo ownership transfers from draft to session on confirmation.
 - A local canvas checks unusually low average brightness and small image dimensions. These are heuristic suggestions, not image understanding. The customer can explicitly confirm that the details remain readable.
-- Blur, glare, obstruction, meter identity, OCR, amperage, and site conditions are **not** automatically verified. Manual confirmation is required. “Complete” means a photo exists and the customer checked it.
+- **Meter step:** the photo is checked automatically on the device and must be *accepted* (or sent anyway after repeated rejections, which is recorded). See below.
+- **Other steps:** blur, glare, obstruction, amperage, and site conditions are **not** automatically verified. Manual confirmation is required. “Complete” means a photo exists and the customer checked it.
 - Readable JPG, PNG, and WebP files are supported up to 25 MB. HEIC/HEIF depends on browser decoding support; unsupported images show a clear error.
 - In browsers supporting WebMCP, `get_photo_checklist` exposes read-only checklist statuses and sample indicators, never image data or notes.
+
+## Meter photo check
+
+Base's guide asks for a close-up where "the meter number … is legible", in daylight, sharp and unobstructed. The meter step turns that into measurable rules and does two things:
+
+1. **Guides the customer live.** About 8 times a second it measures the camera preview inside the guide circle (brightness, blur, shake). As fast as the models allow (about once a second) it also reads the text in the circle and asks the classifier what the subject is. It shows **one** instruction at a time, most important first, and the circle changes colour (white: searching, amber: adjust, green: ready). When the number has been read identically on two consecutive frames and the preview is steady, it takes the photo automatically. The shutter button is always available too.
+2. **Accepts or rejects the photo** with the reason and how to fix it. Every check is listed. After two rejections the customer may send the photo anyway ("Base's team will review it"), which is recorded on the photo.
+
+### Acceptance rules (`src/lib/meter/criteria.ts`)
+
+| Check | Rule | Rejection message (abridged) |
+| --- | --- | --- |
+| Electric meter in view | Classifier probability for "electric meter" ≥ 0.5 | "That looks like a gas meter / breaker panel…", or "We can't see an electric meter" |
+| Enough light | Mean brightness in the circle ≥ 45/255 | "It's too dark. Try again in daylight…" |
+| In focus | Sharpness (Laplacian variance, ≤960 px) ≥ 40 | "The photo is blurry. Hold steady…" |
+| No glare | Blown-out pixels ≤ 2.5 %, **only enforced when the number can't be read** (white nameplates often clip) | "Glare is covering part of the meter…" |
+| Meter number readable | A 6–14 digit line on a light nameplate, OCR confidence ≥ 0.9, characters ≥ 16 px tall in the saved photo, and the same number the live preview read | "We couldn't find the meter number. Move closer…" / "…couldn't read every digit…" / "Move a little closer…" |
+| Whole number in frame | Number box not touching the edge | "Part of the meter number is outside the photo…" |
+| Nothing covering the number | No dark mass beside the number, and the number isn't a shorter part of a longer digit run elsewhere on the label (e.g. the barcode caption) | "Something may be covering the meter number…" |
+
+"Accepted" means the photo meets the photo guide. It is not an eligibility decision.
+
+### How it works
+
+- **Text reading:** PaddleOCR PP-OCRv4 (text detection + recognition, ~16 MB ONNX, from the `@gutenye/ocr-models` npm package, self-hosted). `src/lib/meter/number.ts` picks the meter number from the text lines. It ignores spec lines ("FORM 2S CL200 240V") and barcode captions, which contain letters, and LCD kWh readings, which sit on a darker display.
+- **Subject check:** CLIP ViT-B/32 zero-shot (`Xenova/clip-vit-base-patch32` via Transformers.js, 8-bit, ~150 MB, downloaded from Hugging Face on first use and then cached by the browser). The image is compared with text prompts for electric meter, gas meter, water meter, breaker panel and "other" (house wall, room, AC unit…). Prompts are in `criteria.ts`.
+- Both models run in one Web Worker (`src/lib/meter/analyzer.worker.ts`) on ONNX Runtime WebAssembly, so the preview stays smooth. Decisions are pure functions (`acceptance.ts`, `guidance.ts`, `number.ts`) with unit tests.
+
+### Testing without a real meter
+
+- `?debug=1` shows live measurements, classifier probabilities and OCR lines under the camera.
+- `?subject=electric_meter` (or `gas_meter`, `breaker_panel`, `other`, `off`) fakes the classifier, e.g. offline or before the model has downloaded.
+- Point a laptop webcam at a meter photo on another screen, or use **Upload photo** with the images in `eval/meter`.
+- `npm run eval:meter` scores the check on `eval/meter`. It currently gets 19/19 with 0 false accepts, but those images are all derived from **one** Oncor sample, so treat it as a regression test, not evidence of real-world accuracy. Add real photos (other utilities, analog dials, shade, angles, gas meters) to `eval/meter/manifest.json`.
+
+### Known limits
+
+- The classifier and all thresholds have **not been validated on real photos yet**. CLIP's zero-shot gas-vs-electric distinction is the least certain part. Use `?debug=1` and `npm run eval:meter -- --subject` to tune `criteria.ts`.
+- First visit downloads ~170 MB of models (use Wi-Fi). If the classifier can't load, photos are rejected with a message saying so, rather than accepted unchecked.
+- Browsers give little control over focus. "Tap to focus" isn't available, so the blur guidance asks the customer to hold steady or step back.
+- Uploaded photos skip live guidance and get the final check on the whole image.
+
+## Whole meter wall check
+
+Base's guide: "From as far back as possible (at least 10 steps), take a photo of the wall surrounding your meter." Base uses it to plan where the 3 ft × 3 ft battery can go (within 20 ft of the meter, against the wall, on the ground, clear of windows, meters and gas meters).
+
+**Live guidance** (`src/lib/wall/assess.ts` → `guideWall`): one instruction at a time. It asks the customer to turn the phone sideways, get more light, step back if the scene looks like a close-up of the meter, move outside if it looks like a room, and hold steady. The frame turns green when it's ready. The customer presses the shutter; nothing is auto-captured, because the app can't yet see where the meter is while framing.
+
+**After capture** (`src/lib/wall/locate.ts`):
+
+1. **Find the meter.** OpenCV's Hough circle transform finds round shapes (meter glass covers) at two box-filtered sizes. CLIP scores a crop around each: electric meter, or something else (AC unit, window, light, hose reel…).
+2. **Confirm with the customer.** The best candidate is circled: "Is this your electric meter?" If it's wrong, or nothing was found, they **tap the meter in the photo**. A tap snaps to a nearby circle when there is one, so the meter's size is still measured. Keyboard users can move a marker with the arrow keys and press Enter. "My meter isn't in this photo" is also an answer.
+3. **Accept or reject** (`decideWall`) with the reason and how to fix it:
+
+| Check | Rule (`src/lib/wall/criteria.ts`) | Rejection message (abridged) |
+| --- | --- | --- |
+| Outside wall of your home | CLIP scene "house wall" ≥ 0.5 (skipped if the classifier isn't available) | "This photo needs to be taken outside…" |
+| Meter in the photo | Customer confirmed or tapped the meter | "We need your electric meter in this photo…" |
+| Taken from far enough back | Meter cover diameter ≤ 12 % of photo height, and the scene isn't a meter close-up | "You're too close… step back at least 10 steps" |
+| Wall visible on both sides | Meter centre ≥ 20 % from each side edge; if the size is known, ≥ 3 ft of wall each side | "Include more of the wall to the left/right…" |
+| Ground visible below the meter | If the size is known, ≥ 3.5 ft of photo below the meter centre; otherwise meter in the top 70 % | "Include the ground below the meter…" |
+| Phone held sideways | Landscape photo | "Turn your phone sideways…" |
+| Enough light / In focus | Same measures as the meter step | "It's too dark…" / "The photo is blurry…" |
+
+**Distance estimates** use the meter's glass cover (about 7 in across on US socket meters) as a ruler. For example: "About 6 ft of wall shows left of the meter and 7 ft to the right." That's roughly ±30 %, so it's shown as an estimate and saved with the photo for Base's reviewers, and only a very short side (< 3 ft) is rejected.
+
+**Testing:** `?scene=house_wall|meter_closeup|indoors|other|off` fakes the scene classifier; `?debug=1` shows candidates, scores and estimates. `src/lib/wall/circles.test.ts` checks the circle search against Base's guide photos in `eval/wall`.
+
+**Known limits:**
+
+- CLIP prompts and thresholds are untested on real photos (Hugging Face was unreachable from the build environment). With the classifier unavailable, the strongest circle is offered and the customer confirms or taps it.
+- Meters without a round cover, very distant meters (cover under ~1 % of the photo height), or meters in deep shade may not be found automatically; the tap covers these.
+- The app doesn't check that the photo is the *meter's* wall versus another wall; the confirmed meter is the evidence.
 
 ## Optional measurements: demo-only and unverified
 
@@ -100,12 +178,17 @@ CDN prefix: `https://usw2.frontkb-cdn.com/attachments/11263396/997313/`
 | breaker.png | b635570d-c7c8-40ca-a0fe-6b54ae9c5348.png |
 | rating.png | c2d36703-4635-462d-909b-b4c583ede320.png |
 
-Icons: Lucide (ISC). OpenCV.js: OpenCV Apache-2.0 distribution via `@techstark/opencv-js`; see package license files. The Base wordmark and red/neutral visual treatment are a demo interpretation, not an official supplied brand kit.
+Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-common` (MIT; PaddleOCR models Apache-2.0). CLIP via Transformers.js (Apache-2.0); OpenAI CLIP weights (MIT). ONNX Runtime (MIT). OpenCV.js: OpenCV Apache-2.0 distribution via `@techstark/opencv-js`; see package license files. The Base wordmark and red/neutral visual treatment are a demo interpretation, not an official supplied brand kit.
 
 ## Source structure
 
 - `src/components/Welcome.tsx`: introduction and explicit start action.
 - `src/components/GuidedCapture.tsx`: camera, upload, samples, drafts, confirmation, safety, and conditional fence prompt.
+- `src/components/MeterCapture.tsx`: the meter step — live guidance overlay, auto-capture, accept/reject result.
+- `src/components/WallCapture.tsx`: the whole-meter-wall step — live guidance, meter confirm/tap, accept/reject result.
+- `src/lib/wall/`: `criteria.ts` (rules, prompts, copy), `assess.ts` (live instruction and decision), `circles.ts` (OpenCV meter-cover search), `locate.ts` (photo pipeline).
+- `src/lib/meter/`: meter photo check — `criteria.ts` (rules and copy), `guidance.ts` (live instruction), `acceptance.ts` (accept/reject), `number.ts` (pick the meter number from OCR lines), `image.ts` / `metrics.ts` (image measurements), `frames.ts` (camera/photo plumbing), `analyzer.ts` + `analyzer.worker.ts` + `clip.ts` (on-device models).
+- `scripts/eval-meter.ts`: runs the meter check in Node against labeled photos.
 - `src/components/PhotoChecklist.tsx`: capture progress and navigation.
 - `src/components/OptionalEstimate.tsx`: separate gated manual point-selection workflow.
 - `src/components/Review.tsx`: evidence review, observations, and result states.
