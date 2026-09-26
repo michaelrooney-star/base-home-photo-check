@@ -137,7 +137,7 @@ export function CaseDetail() {
       </div>
 
       {/* Primary: DAG */}
-      <div>
+      <div className={selectedNodeId ? 'md:pr-[400px] transition-[padding] duration-150' : ''}>
         <PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} />
       </div>
 
@@ -162,7 +162,7 @@ export function CaseDetail() {
       {selectedNode ? (
         <>
           {/* Desktop rail */}
-          <aside className="hidden md:block fixed right-0 top-0 bottom-0 w-full max-w-md border-l bg-white overflow-y-auto z-50">
+          <aside className="hidden md:block fixed right-0 top-0 bottom-0 w-[400px] border-l bg-white overflow-y-auto z-50">
             <NodeDetail node={selectedNode} rec={rec} onClose={() => setSelectedNodeId(null)} />
           </aside>
           {/* Mobile bottom sheet */}
