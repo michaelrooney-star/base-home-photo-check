@@ -50,11 +50,13 @@ export const WALL_CRITERIA = {
   /** When the scale isn't known: meter centre must be above this share of photo height (ground below it). */
   maxMeterY: 0.7,
   minLuma: 45,
-  /** Laplacian variance of the contrast-stretched photo (≤960px). */
-  minSharpness: 40,
+  /** Laplacian variance of the contrast-stretched photo (≤1200px). Wide shots have no small text, so this is lenient. */
+  minSharpness: 15,
   /** Live preview: consecutive steady, sharp, well-lit frames before we say "take the photo". */
   readyFrames: 6,
-  minLiveSharpness: 900,
+  /** Live focus: relative to the sharpest recent frame, with a low absolute floor (see the meter criteria). */
+  minRelativeSharpness: 0.6,
+  minLiveSharpness: 150,
   maxMotion: 6,
   freshMs: 3000,
   rejectionsBeforeOverride: 2,

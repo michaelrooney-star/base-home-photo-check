@@ -77,7 +77,7 @@ The electrical/spacing article is background for Base's review, **not an eligibi
 
 Base's guide asks for a close-up where "the meter number … is legible", in daylight, sharp and unobstructed. The meter step turns that into measurable rules and does two things:
 
-1. **Guides the customer live.** About 8 times a second it measures the camera preview inside the guide circle (brightness, blur, shake). As fast as the models allow (about once a second) it also reads the text in the circle and asks the classifier what the subject is. It shows **one** instruction at a time, most important first, and the circle changes colour (white: searching, amber: adjust, green: ready). When the number has been read identically on two consecutive frames and the preview is steady, it takes the photo automatically. The shutter button is always available too.
+1. **Guides the customer live.** About 8 times a second it measures the camera preview inside the guide circle (brightness, blur, shake). Focus is judged **relative to the sharpest frame in the last 4 seconds** (≥ 60 % of it, with a very low absolute floor), so the same rule works for a phone camera and a soft laptop webcam. Shake or refocusing shows up as a drop. As fast as the models allow (about once a second) it also reads the text in the circle and asks the classifier what the subject is. It shows **one** instruction at a time, most important first, and the circle changes colour (white: searching, amber: adjust, green: ready). When the number has been read identically on two consecutive frames and the preview is steady, it takes the photo automatically. The shutter button is always available too.
 2. **Accepts or rejects the photo** with the reason and how to fix it. Every check is listed. After two rejections the customer may send the photo anyway ("Base's team will review it"), which is recorded on the photo.
 
 ### Acceptance rules (`src/lib/meter/criteria.ts`)
@@ -86,7 +86,7 @@ Base's guide asks for a close-up where "the meter number … is legible", in day
 | --- | --- | --- |
 | Electric meter in view | Classifier probability for "electric meter" ≥ 0.5 | "That looks like a gas meter / breaker panel…", or "We can't see an electric meter" |
 | Enough light | Mean brightness in the circle ≥ 45/255 | "It's too dark. Try again in daylight…" |
-| In focus | Sharpness (Laplacian variance, ≤960 px) ≥ 40 | "The photo is blurry. Hold steady…" |
+| In focus | Sharpness (Laplacian variance, ≤960 px) ≥ 40, **only enforced when the number can't be read**: a confident read is the proof of legibility | "The photo is blurry. Hold steady…" |
 | No glare | Blown-out pixels ≤ 2.5 %, **only enforced when the number can't be read** (white nameplates often clip) | "Glare is covering part of the meter…" |
 | Meter number readable | A 6–14 digit line on a light nameplate, OCR confidence ≥ 0.9, characters ≥ 16 px tall in the saved photo, and the same number the live preview read | "We couldn't find the meter number. Move closer…" / "…couldn't read every digit…" / "Move a little closer…" |
 | Whole number in frame | Number box not touching the edge | "Part of the meter number is outside the photo…" |
@@ -134,7 +134,7 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 | Wall visible on both sides | Meter centre ≥ 20 % from each side edge; if the size is known, ≥ 3 ft of wall each side | "Include more of the wall to the left/right…" |
 | Ground visible below the meter | If the size is known, ≥ 3.5 ft of photo below the meter centre; otherwise meter in the top 70 % | "Include the ground below the meter…" |
 | Phone held sideways | Landscape photo | "Turn your phone sideways…" |
-| Enough light / In focus | Same measures as the meter step | "It's too dark…" / "The photo is blurry…" |
+| Enough light / In focus | Brightness ≥ 45/255; sharpness ≥ 15 (lenient: wide shots have no small text) | "It's too dark…" / "The photo is blurry…" |
 
 **Distance estimates** use the meter's glass cover (about 7 in across on US socket meters) as a ruler. For example: "About 6 ft of wall shows left of the meter and 7 ft to the right." That's roughly ±30 %, so it's shown as an estimate and saved with the photo for Base's reviewers, and only a very short side (< 3 ft) is rejected.
 

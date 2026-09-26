@@ -3,8 +3,8 @@ import { Check, CircleAlert, CircleCheck, ImagePlus, Loader2, MapPin, RotateCcw,
 import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, type ModelState } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
-import { FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
-import { guideWall, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
+import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
+import { guideWall, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
 import { WALL_CRITERIA, WALL_MESSAGES, type SceneClass } from '../lib/wall/criteria';
 import { analyzeWallPhoto, decide, spotFromTap, type WallAnalysis } from '../lib/wall/locate';
 import type { useCamera } from '../lib/useCamera';
@@ -92,15 +92,17 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     if (phase !== 'live' || !camera.stream || !videoReady) return;
     const id = run.current; let alive = true;
     live.current = { fast: null, goodFrames: 0, landscape: true, scene: null, prev: null };
+    const focus = createFocusTracker();
     const tick = setInterval(() => {
       const v = video.current; if (!v || !v.videoWidth) return;
       const small = gray(grab(v, { x: 0, y: 0, w: v.videoWidth, h: v.videoHeight }, FAST_SIZE));
       const m = fastMetrics(small, live.current.prev);
+      m.relSharpness = focus(performance.now(), m.sharpness);
       live.current.prev = small; live.current.fast = m; live.current.landscape = v.videoWidth >= v.videoHeight;
-      live.current.goodFrames = m.luma >= WALL_CRITERIA.minLuma && m.sharpness >= WALL_CRITERIA.minLiveSharpness && m.motion <= WALL_CRITERIA.maxMotion ? live.current.goodFrames + 1 : 0;
+      live.current.goodFrames = m.luma >= WALL_CRITERIA.minLuma && wallInFocus(m) && m.motion <= WALL_CRITERIA.maxMotion ? live.current.goodFrames + 1 : 0;
       const g = guideWall({ ...live.current, now: performance.now() });
       setGuidance(prev => (prev && prev.message === g.message && prev.tone === g.tone && JSON.stringify(prev.checks) === JSON.stringify(g.checks) ? prev : g));
-      if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), motion: m.motion.toFixed(1) }));
+      if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), relSharp: m.relSharpness.toFixed(2), motion: m.motion.toFixed(1) }));
     }, 125);
     (async () => {
       while (alive && id === run.current) {

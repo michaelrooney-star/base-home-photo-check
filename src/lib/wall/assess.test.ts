@@ -46,12 +46,16 @@ describe('decideWall', () => {
 });
 
 describe('guideWall', () => {
-  const base: WallLive = { now: 5000, fast: { luma: 150, sharpness: 3000, glare: 0, motion: 1 }, goodFrames: 10, landscape: true, scene: { result: wall, at: 4500 } };
+  const base: WallLive = { now: 5000, fast: { luma: 150, sharpness: 3000, relSharpness: 1, glare: 0, motion: 1 }, goodFrames: 10, landscape: true, scene: { result: wall, at: 4500 } };
   it('says ready when steady, lit, landscape and a house wall', () => { expect(guideWall(base)).toMatchObject({ tone: 'ready', message: M.ready }); });
   it('prioritises one instruction', () => {
     expect(guideWall({ ...base, landscape: false }).message).toBe(M.landscape);
     expect(guideWall({ ...base, scene: { result: closeup, at: 4500 } }).message).toBe(M.closeup);
     expect(guideWall({ ...base, scene: { result: indoors, at: 4500 } }).message).toBe(M.indoors);
     expect(guideWall({ ...base, fast: { ...base.fast!, motion: 20 } }).message).toBe(M.steady);
+  });
+  it('judges focus relative to the camera’s recent best', () => {
+    expect(guideWall({ ...base, fast: { ...base.fast!, sharpness: 300, relSharpness: 0.9 } }).tone).toBe('ready');
+    expect(guideWall({ ...base, fast: { ...base.fast!, sharpness: 300, relSharpness: 0.4 } }).message).toBe(M.blurry);
   });
 });

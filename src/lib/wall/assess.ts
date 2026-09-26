@@ -47,6 +47,8 @@ export function decideWall(e: WallEvidence): WallDecision {
   return { accepted: failed.length === 0, checks, reasons: [...new Set(failed.map(c => c.message!))], estimate: est };
 }
 
+export const wallInFocus = (m: FastMetrics) => m.sharpness >= C.minLiveSharpness && m.relSharpness >= C.minRelativeSharpness;
+
 export type WallTone = 'search' | 'adjust' | 'hold' | 'ready';
 export type WallLive = { now: number; fast: FastMetrics | null; goodFrames: number; landscape: boolean; scene: { result: SceneResult; at: number } | null };
 export type WallGuidance = { tone: WallTone; message: string; checks: WallCheck[] };
@@ -62,7 +64,7 @@ export function guideWall(i: WallLive): WallGuidance {
     c('distance', !scene || scene.status !== 'ok' ? 'pending' : scene.probs.meter_closeup >= C.maxMeterCloseup ? 'fail' : 'pass'),
     c('orientation', i.landscape ? 'pass' : 'fail'),
     c('light', !m ? 'pending' : m.luma >= C.minLuma ? 'pass' : 'fail'),
-    c('focus', !m ? 'pending' : m.sharpness >= C.minLiveSharpness && m.motion <= C.maxMotion ? 'pass' : 'fail'),
+    c('focus', !m ? 'pending' : wallInFocus(m) && m.motion <= C.maxMotion ? 'pass' : 'fail'),
   ];
   const out = (tone: WallTone, message: string): WallGuidance => ({ tone, message, checks });
   if (!m) return out('search', M.loading);
@@ -71,7 +73,7 @@ export function guideWall(i: WallLive): WallGuidance {
   if (scene?.status === 'ok' && scene.probs.meter_closeup >= C.maxMeterCloseup) return out('adjust', M.closeup);
   if (scene?.status === 'ok' && scene.probs.house_wall < C.minHouseWall) return out('search', sceneMessage(scene));
   if (m.motion > C.maxMotion) return out('adjust', M.steady);
-  if (m.sharpness < C.minLiveSharpness) return out('adjust', M.blurry);
+  if (!wallInFocus(m)) return out('adjust', M.blurry);
   if (!scene) return out('hold', M.point);
   return i.goodFrames >= C.readyFrames ? out('ready', M.ready) : out('hold', M.steady);
 }

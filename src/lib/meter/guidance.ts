@@ -18,7 +18,8 @@ export type LiveInput = {
 
 /** Light, focus and steadiness. Glare is deliberately not here: bright white nameplates often clip, and glare only
  *  matters when it stops us reading the number (handled in guide()). */
-export const frameIsGood = (m: FastMetrics) => m.luma >= CRITERIA.minLuma && m.sharpness >= CRITERIA.minLiveSharpness && m.motion <= CRITERIA.maxMotion;
+export const inFocus = (m: FastMetrics) => m.sharpness >= CRITERIA.minLiveSharpness && m.relSharpness >= CRITERIA.minRelativeSharpness;
+export const frameIsGood = (m: FastMetrics) => m.luma >= CRITERIA.minLuma && inFocus(m) && m.motion <= CRITERIA.maxMotion;
 
 export function guide(i: LiveInput): Guidance {
   const fresh = <T extends { at: number }>(x: T | null) => (x && i.now - x.at <= CRITERIA.freshMs ? x : null);
@@ -32,7 +33,7 @@ export function guide(i: LiveInput): Guidance {
     { ...subjectCheck(subject), message: undefined },
     c('light', !m ? 'pending' : m.luma >= CRITERIA.minLuma ? 'pass' : 'fail'),
     c('glare', !m ? 'pending' : m.glare <= CRITERIA.maxGlare ? 'pass' : 'fail'),
-    c('focus', !m ? 'pending' : m.sharpness >= CRITERIA.minLiveSharpness && m.motion <= CRITERIA.maxMotion ? 'pass' : 'fail'),
+    c('focus', !m ? 'pending' : inFocus(m) && m.motion <= CRITERIA.maxMotion ? 'pass' : 'fail'),
     c('number', !obs ? 'pending' : readable && bigEnough ? 'pass' : 'fail'),
   ];
   const out = (tone: Tone, message: string, capture = false): Guidance => ({ tone, message, checks, capture });
@@ -43,7 +44,7 @@ export function guide(i: LiveInput): Guidance {
   // Glare only matters once we've tried and failed to read the number (white nameplates often clip anyway).
   if (m.glare > CRITERIA.maxGlare && obs && !readable) return out('adjust', MESSAGES.glare);
   if (m.motion > CRITERIA.maxMotion) return out('adjust', MESSAGES.steady);
-  if (m.sharpness < CRITERIA.minLiveSharpness) return out('adjust', MESSAGES.blurry);
+  if (!inFocus(m)) return out('adjust', MESSAGES.blurry);
   if (!obs) return out('search', subject.status === 'ok' ? MESSAGES.hold : MESSAGES.point);
   if (!obs.meter_number_visible) return out('adjust', MESSAGES.notFound);
   if (obs.issues.includes('obstructed')) return out('adjust', MESSAGES.obstructed);
