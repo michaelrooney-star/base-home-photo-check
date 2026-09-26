@@ -41,6 +41,13 @@ export type Citation = {
   source?: string;
 };
 
+export type SitePhoto = {
+  id: string;
+  title: string;
+  src: string;
+  note: string;
+};
+
 export type Finding = {
   domain:
     | 'PERMIT'
@@ -88,6 +95,7 @@ export type CaseRecord = {
   plan: PlanNode[];
   why: Finding[]; // reconciled findings
   demoStage?: 'queued' | 'running' | 'ready' | 'review' | 'degraded' | 'blocked' | 'unknown';
+  sitePhotos: SitePhoto[];
 };
 
 export type AdminToggles = {

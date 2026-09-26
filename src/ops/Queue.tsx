@@ -1,6 +1,6 @@
-import { ArrowUpRight, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowUpRight, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StatusPill, statusLabel, statusTone } from '../components/ConsoleShell';
 
 type CaseRow = {
@@ -20,21 +20,59 @@ export function Queue() {
   const { userId } = useParams();
   const [rows, setRows] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stale, setStale] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const firstLoad = useRef(true);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<(typeof filters)[number]>('ALL');
 
   useEffect(() => {
     let ignore = false;
-    async function load() {
-      setLoading(true);
+    async function load(initial = false) {
+      if (!initial) setRefreshing(true);
+      try {
+        const res = await fetch(`/api/ops/queue/${userId}`);
+        const data = await res.json();
+        if (!ignore) {
+          setRows(data.cases ?? []);
+          setLastUpdated(new Date());
+          setStale(false);
+          if (firstLoad.current) {
+            firstLoad.current = false;
+            setLoading(false);
+          }
+        }
+      } catch {
+        if (!ignore) {
+          setStale(true);
+          if (firstLoad.current) {
+            firstLoad.current = false;
+            setLoading(false);
+          }
+        }
+      } finally {
+        if (!ignore) setRefreshing(false);
+      }
+    }
+    void load(true);
+    return () => { ignore = true; };
+  }, [userId]);
+
+  async function refreshQueue() {
+    setRefreshing(true);
+    try {
       const res = await fetch(`/api/ops/queue/${userId}`);
       const data = await res.json();
-      if (!ignore) { setRows(data.cases ?? []); setLoading(false); }
+      setRows(data.cases ?? []);
+      setLastUpdated(new Date());
+      setStale(false);
+    } catch {
+      setStale(true);
+    } finally {
+      setRefreshing(false);
     }
-    load();
-    const t = setInterval(load, 4000);
-    return () => { ignore = true; clearInterval(t); };
-  }, [userId]);
+  }
 
   const counts = useMemo(() => rows.reduce<Record<string, number>>((acc, row) => {
     acc[row.status] = (acc[row.status] ?? 0) + 1;
@@ -51,7 +89,7 @@ export function Queue() {
   }, [filter, query, rows]);
 
   return <section className="console-page">
-    <div className="console-page-heading"><div><p className="console-eyebrow"><span /> OPERATIONS QUEUE</p><h1>Cases ready for review<span>.</span></h1><p className="console-page-description">Track permit research, conflicts, and jurisdiction packs as they move through the workflow.</p></div><div className="console-heading-meta"><span className="console-live-dot" /> Live · refreshes every 4 seconds</div></div>
+    <div className="console-page-heading"><div><p className="console-eyebrow"><span /> OPERATIONS QUEUE</p><h1>Cases ready for review<span>.</span></h1><p className="console-page-description">Track permit research, conflicts, and jurisdiction packs as they move through the workflow.</p></div><div className="console-heading-meta"><span className={`console-live-dot ${stale ? 'is-stale' : ''}`} />{stale ? 'Stale · refresh failed' : lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Waiting for first update'}<button className="console-refresh-button" onClick={refreshQueue} disabled={refreshing}><RefreshCw size={14} className={refreshing ? 'console-spin' : ''} />{refreshing ? 'Refreshing' : 'Refresh'}</button></div></div>
     <div className="console-summary-grid" aria-label="Queue summary">
       <div className="console-summary-card"><span>Total cases</span><strong>{rows.length}</strong><small>Assigned to {userId}</small></div><div className="console-summary-card is-ready"><span>Ops ready</span><strong>{counts.OPS_READY ?? 0}</strong><small>Ready for the next step</small></div><div className="console-summary-card is-review"><span>Needs review</span><strong>{(counts.NEEDS_REVIEW ?? 0) + (counts.BLOCKED ?? 0)}</strong><small>Requires operator attention</small></div><div className="console-summary-card is-muted"><span>Queued</span><strong>{counts.QUEUED ?? 0}</strong><small>Waiting to run</small></div>
     </div>

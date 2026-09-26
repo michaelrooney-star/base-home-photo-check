@@ -4,6 +4,7 @@ import {
   CaseRecord,
   Finding,
   PackId,
+  SitePhoto,
 } from './types';
 import { makePlan } from './runner';
 
@@ -86,7 +87,7 @@ function newCase(
   const initialJobState = demoStage === 'ready' || demoStage === 'degraded' ? 'OPS_READY' :
     demoStage === 'review' ? 'NEEDS_REVIEW' : demoStage === 'blocked' ? 'BLOCKED' :
     demoStage === 'unknown' ? 'UNKNOWN' : demoStage === 'running' ? 'RUNNING' : 'QUEUED';
-  return {
+  const rec: CaseRecord = {
     id,
     created_at: Date.now(),
     assignee,
@@ -98,7 +99,39 @@ function newCase(
     plan: [],
     why: findingsForPack(pack),
     demoStage,
+    sitePhotos: sitePhotosForPack(pack),
   };
+  return rec;
+}
+
+function sitePhotosForPack(pack: PackId): SitePhoto[] {
+  const set = pickSet(pack);
+  const base = `/demo/site-evidence/site-evidence-sets/${set}`;
+  const photos = [
+    { id: 'meter', title: 'Meter number', file: 'meter-number.webp' },
+    { id: 'wall', title: 'Whole meter wall', file: 'whole-meter-wall.webp' },
+    { id: 'left', title: 'Left side of meter', file: 'left-side.webp' },
+    { id: 'right', title: 'Right side of meter', file: 'right-side.webp' },
+    { id: 'breaker', title: 'Main breaker box', file: 'breaker-box.webp' },
+    { id: 'rating', title: 'Main disconnect rating', file: 'disconnect-rating.webp' },
+    { id: 'adjacent', title: 'Adjacent wall', file: 'adjacent-wall.webp' },
+  ];
+  return photos.map((p) => ({ id: p.id, title: p.title, src: `${base}/${p.file}`, note: 'Sample customer photo' }));
+}
+
+function pickSet(pack: PackId): 'set-a' | 'set-b' | 'set-c' {
+  switch (pack) {
+    case 'AUSTIN_RICH':
+      return 'set-a';
+    case 'ROUNDROCK_ONCOR':
+    case 'DALLAS_ONCOR':
+      return 'set-b';
+    case 'HOUSTON_STUB':
+    case 'SANANTONIO_STUB':
+      return 'set-c';
+    default:
+      return Math.random() < 0.5 ? 'set-b' : 'set-c';
+  }
 }
 
 export function seedDemoCases() {

@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, ExternalLink, MapPin, RefreshCw, X } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { StatusPill, statusLabel, statusTone } from '../components/ConsoleShell';
@@ -7,7 +7,7 @@ import type { PlanNodeVM } from './PlanDAG';
 
 type Finding = { domain: string; summary: string; citations: { label: string; url?: string }[]; requirement?: string; ruleIds?: string[] };
 type PlanNodeRaw = { id: string; worker: 'resolve_pack' | 'city' | 'electrical' | 'fire' | 'utility_rules' | 'reconcile'; wave: 0 | 1 | 2; dependsOn: string[]; state: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'; result?: { status: 'ok' | 'failed'; attempts: number; error?: string; findings?: Finding[]; degraded?: boolean } };
-type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[] };
+type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; county?: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[]; sitePhotos?: { id: string; title: string; src: string; note: string }[] };
 
 export function CaseDetail() {
   const { userId, caseId } = useParams();
@@ -16,6 +16,7 @@ export function CaseDetail() {
   const [planning, setPlanning] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showSheet, setShowSheet] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<{ title: string; src: string; note: string } | null>(null);
 
   async function load() {
     const res = await fetch(`/api/ops/cases/${caseId}`);
@@ -41,14 +42,23 @@ export function CaseDetail() {
 
     <div className="console-case-meta"><div><span>Address</span><strong>{rec.fingerprint.address}</strong></div><div><span>City</span><strong>{rec.fingerprint.city}</strong></div><div><span>Utility</span><strong>{rec.fingerprint.utility}</strong></div><div><span>Service</span><strong>{rec.fingerprint.service_amps} amp</strong></div><div><span>Jurisdiction pack</span><strong>{rec.pack}</strong></div></div>
 
+    <SiteEvidence photos={rec.sitePhotos ?? []} address={rec.fingerprint.address} onOpen={setSelectedPhoto} />
+
     <div className="console-workflow-heading"><div><p className="console-eyebrow"><span /> WORKFLOW PLAN</p><h2>Research path</h2></div><span>Click a worker to inspect its evidence and run state.</span></div>
     <div className="console-workflow-card"><div className="console-dag"><PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} /></div></div>
 
     <details className="console-plan-list" role="group"><summary><span><strong>Plan list</strong><small>Accessible workflow summary</small></span><span>{rec.plan.length} workers</span></summary><ul>{rec.plan.map((n) => <li key={n.id}><button onClick={() => onSelectNode(n.id)}>{n.worker.replaceAll('_', ' ')}</button><span>Wave {n.wave}</span><StatusPill tone={n.state === 'DONE' ? 'ready' : n.state === 'FAILED' ? 'danger' : n.state === 'RUNNING' ? 'queued' : 'muted'}>{n.state === 'PENDING' ? 'Queued' : statusLabel(n.state)}</StatusPill></li>)}</ul></details>
 
     {selectedNode && <><aside className="console-detail-rail"><NodeDetail node={selectedNode} rec={rec} onClose={closeNode} /></aside><div className={`console-sheet-backdrop ${showSheet ? 'is-open' : ''}`} onClick={closeNode}><aside className={`console-detail-sheet ${showSheet ? 'is-open' : ''}`} onClick={(e) => e.stopPropagation()}><div className="console-sheet-handle" /><NodeDetail node={selectedNode} rec={rec} onClose={closeNode} /></aside></div></>}
+    {selectedPhoto && <div className="console-photo-lightbox" role="dialog" aria-modal="true" aria-label={`${selectedPhoto.title} preview`} onClick={() => setSelectedPhoto(null)}><div className="console-photo-lightbox-card" onClick={(e) => e.stopPropagation()}><button className="console-icon-button" onClick={() => setSelectedPhoto(null)} aria-label="Close photo preview"><X size={18} /></button><img src={selectedPhoto.src} alt={selectedPhoto.title} /><div><h2>{selectedPhoto.title}</h2><p>{selectedPhoto.note}</p><span><MapPin size={13} /> {addressLabel(rec.fingerprint.address, rec.fingerprint.city)}</span></div></div></div>}
   </section>;
 }
+
+function SiteEvidence({ photos, address, onOpen }: { photos: { id: string; title: string; src: string; note: string }[]; address: string; onOpen: (photo: { title: string; src: string; note: string }) => void }) {
+  return <section className="console-site-evidence"><div className="console-evidence-heading"><div><p className="console-eyebrow"><span /> SITE EVIDENCE</p><h2>Customer photo capture</h2><p>Review the site context before making a permit decision.</p></div><span className="console-evidence-count"><Camera size={15} /> {photos.length} photos</span></div><div className="console-photo-grid">{photos.map((photo) => <button className="console-photo-card" key={photo.id} onClick={() => onOpen(photo)}><img src={photo.src} alt={photo.title} /><span><strong>{photo.title}</strong><small>{photo.note}</small></span></button>)}</div><p className="console-photo-disclaimer"><Camera size={13} /> Mock customer-submitted evidence for this demo · {address}</p></section>;
+}
+
+function addressLabel(address: string, city: string) { return `${address}, ${city}`; }
 
 function NodeDetail({ node, rec, onClose }: { node: PlanNodeRaw; rec: CaseRec; onClose: () => void }) {
   const title = node.worker.replaceAll('_', ' ');
