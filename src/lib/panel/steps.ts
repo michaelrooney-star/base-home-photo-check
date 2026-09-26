@@ -4,6 +4,7 @@
 import type { ClassResult } from '../meter/analyzer.ts';
 import type { SubjectClass } from '../meter/criteria.ts';
 import type { SceneClass } from '../wall/criteria.ts';
+import { MAX_PART_OF_PANEL, type FramingClass } from './criteria.ts';
 
 export type CheckedStep = 'breaker' | 'rating' | 'adjacent' | 'fence';
 export type Chip = { label: string; state: 'pass' | 'fail' | 'warn' | 'info' };
@@ -17,6 +18,8 @@ export type StepResult = {
   /** Saved with the photo for Base's reviewers. */
   note?: string;
   amps?: number;
+  /** Accepted, but a retake would help (shown as the main action). */
+  improve?: string;
 };
 
 export const STEP_RULES = { minLuma: 45, minSharpness: 15, minBreaker: 0.4 };
@@ -28,17 +31,19 @@ const quality = (q: Quality): { chip: Chip; fix: string | null } => {
 };
 
 /** Breaker box: is it a breaker panel (not the meter, not something else), and is the photo usable? */
-export function decideBreaker(e: Quality & { subject: ClassResult<SubjectClass> | null }): StepResult {
+export function decideBreaker(e: Quality & { subject: ClassResult<SubjectClass> | null; framing?: ClassResult<FramingClass> | null }): StepResult {
   const q = quality(e);
   const s = e.subject?.status === 'ok' ? e.subject : null;
   const isPanel = !s || s.top === 'breaker_panel' || s.probs.breaker_panel >= STEP_RULES.minBreaker;
   const fix = !isPanel
     ? s!.top === 'electric_meter' ? 'That’s your meter — now show the breaker box (the panel of switches).' : 'We can’t see a breaker box. Show the whole panel.'
     : q.fix;
+  const partial = !fix && e.framing?.status === 'ok' && e.framing.probs.part_of_panel >= MAX_PART_OF_PANEL;
   return {
     accepted: !fix,
-    line: fix ?? (s ? 'Breaker box found.' : 'Photo looks clear.'),
-    chips: [{ label: 'Breaker box', state: !s ? 'info' : isPanel ? 'pass' : 'fail' }, q.chip],
+    improve: partial ? 'Step back so the whole box — top to bottom — and a bit of the wall around it fit.' : undefined,
+    line: fix ?? (partial ? 'Breaker box found, but only part of it.' : s ? 'Breaker box found.' : 'Photo looks clear.'),
+    chips: [{ label: 'Breaker box', state: !s ? 'info' : isPanel ? 'pass' : 'fail' }, ...(e.framing?.status === 'ok' ? [{ label: 'Whole box', state: partial ? 'warn' as const : 'pass' as const }] : []), q.chip],
     details: 'We look for your main breaker box — the whole panel, door open or closed — so Base can see its size and where it is.' + (s ? '' : ' Photo recognition wasn’t available, so we didn’t check what’s in the photo.'),
   };
 }

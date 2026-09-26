@@ -1,5 +1,6 @@
 // Main-thread client for analyzer.worker.ts: reads text lines (PaddleOCR) and classifies images (CLIP zero-shot).
 import { CANDIDATE_CLASSES, CANDIDATE_PROMPTS, SCENE_CLASSES, SCENE_PROMPTS } from '../wall/criteria.ts';
+import { FRAMING_CLASSES, FRAMING_PROMPTS } from '../panel/criteria.ts';
 import type { SubjectResult } from './acceptance.ts';
 import { SUBJECT_CLASSES, SUBJECT_PROMPTS, type SubjectClass } from './criteria.ts';
 import type { OcrLine } from './number.ts';
@@ -11,6 +12,7 @@ const SETS = {
   subject: { classes: SUBJECT_CLASSES, prompts: SUBJECT_PROMPTS },
   scene: { classes: SCENE_CLASSES, prompts: SCENE_PROMPTS },
   candidate: { classes: CANDIDATE_CLASSES, prompts: CANDIDATE_PROMPTS },
+  framing: { classes: FRAMING_CLASSES, prompts: FRAMING_PROMPTS },
 } as const;
 export type PromptSet = keyof typeof SETS;
 export const PROMPTS = (Object.keys(SETS) as PromptSet[]).flatMap(set => {
@@ -163,4 +165,15 @@ export async function detectObjects(img: ImageData, lb: import('../wall/objects.
   });
   if (!r.output || !r.anchors) { console.warn('[wall] object detection failed:', r.error); return null; }
   return { output: r.output, anchors: r.anchors };
+}
+
+/** One CLIP pass over one image, scored against several prompt sets (e.g. what it is and how it's framed). */
+export async function classifySets(image: ImageData, sets: PromptSet[]): Promise<Partial<Record<PromptSet, { status: 'ok'; top: string; probs: Record<string, number> }>> | null> {
+  await prewarmAnalyzer().catch(() => undefined);
+  if (mocking() || status.subject !== 'ready' || !worker) return null;
+  const id = nextId++, payload = [{ width: image.width, height: image.height, data: new Uint8ClampedArray(image.data) }];
+  const r = await new Promise<WorkerResult>(resolve => { pending.set(id, resolve); worker!.postMessage({ type: 'classify', id, images: payload }, [payload[0].data.buffer]); });
+  if (!r.logits) return null;
+  const logits = (r.logits as number[][])[0];
+  return Object.fromEntries(sets.map(set => [set, scoreSet<string>(set, logits)]));
 }

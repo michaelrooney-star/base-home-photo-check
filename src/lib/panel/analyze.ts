@@ -1,6 +1,7 @@
 // Browser pipeline for the breaker box, rating, adjacent-wall and fence photos: gathers evidence with the same on-device
 // models as the meter and wall steps, then hands it to the pure decisions in ./steps.ts.
-import { analyze, classifyImages, detectObjects, mockScene, mockSubject, waitForSubject } from '../meter/analyzer.ts';
+import { analyze, classifyImages, classifySets, detectObjects, mockScene, mockSubject, waitForSubject, type ClassResult } from '../meter/analyzer.ts';
+import type { FramingClass } from './criteria.ts';
 import type { SubjectClass } from '../meter/criteria.ts';
 import { grab, grabExact } from '../meter/frames.ts';
 import { meanLuma, ocrSize, sharpness, stretch, toGray } from '../meter/image.ts';
@@ -32,8 +33,10 @@ export async function analyzeStep(step: CheckedStep, url: string): Promise<StepR
 
   if (step === 'breaker') {
     await waitForSubject(60_000);
-    const subject = mockSubject() ?? (await classifyImages<SubjectClass>([grab(img, full, 336)], 'subject'))?.[0] ?? null;
-    return decideBreaker({ ...q, subject });
+    const mock = mockSubject();
+    const r = mock ? null : await classifySets(grab(img, full, 336), ['subject', 'framing']);
+    const subject = mock ?? (r?.subject as ClassResult<SubjectClass> | undefined) ?? null;
+    return decideBreaker({ ...q, subject, framing: (r?.framing as ClassResult<FramingClass> | undefined) ?? null });
   }
   if (step === 'rating') {
     const size = ocrSize(full.w, full.h, 960);

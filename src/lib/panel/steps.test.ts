@@ -15,6 +15,13 @@ describe('breaker box', () => {
     const r = decideBreaker({ ...good, subject: null });
     expect(r.accepted).toBe(true); expect(r.chips[0].state).toBe('info');
   });
+  it('accepts part of a panel but suggests stepping back to show the whole box', () => {
+    const framing = (part: number) => ({ status: 'ok' as const, top: part > 0.5 ? 'part_of_panel' as const : 'whole_panel' as const, probs: { whole_panel: 1 - part, part_of_panel: part } });
+    const r = decideBreaker({ ...good, subject: subject('breaker_panel'), framing: framing(0.8) });
+    expect(r).toMatchObject({ accepted: true, line: 'Breaker box found, but only part of it.' });
+    expect(r.improve).toMatch(/whole box/);
+    expect(decideBreaker({ ...good, subject: subject('breaker_panel'), framing: framing(0.3) }).improve).toBeUndefined();
+  });
   it('asks for light in a dark closet', () => { expect(decideBreaker({ luma: 20, sharpness: 80, subject: subject('breaker_panel') }).line).toMatch(/Too dark/); });
 });
 

@@ -202,3 +202,10 @@
 .checked-frame{width:100%;min-height:0}
 @media(max-width:760px){.checked-frame{min-height:0;aspect-ratio:4/3}.rating-frame{aspect-ratio:3/4;max-height:62vh}}
 .sr-only{left:0;top:0}
+.result-extra{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:#fff;border:1px solid #dcdcd2}
+.result-extra strong{display:block;font-size:14px;margin-bottom:6px}
+.result-extra.attention{border:2px solid var(--red);animation:nudge .3s ease 2}
+@keyframes nudge{50%{transform:translateX(4px)}}
+.choice-chips{display:flex;flex-wrap:wrap;gap:6px}
+.choice-chips button{padding:7px 12px;border-radius:16px;border:1px solid #c9ccc0;background:#fff;font-size:14px;cursor:pointer}
+.choice-chips button[aria-pressed="true"]{background:#2f3a2b;color:#fff;border-color:#2f3a2b}

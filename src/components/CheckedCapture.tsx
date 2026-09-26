@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, CircleAlert, CircleCheck, ImagePlus, Info, Loader2, RotateCcw, Send, Upload } from 'lucide-react';
 import { prewarmAnalyzer, prewarmDetector } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
@@ -13,7 +13,8 @@ import type { useCamera } from '../lib/useCamera';
  * Guided capture for the breaker box, main breaker rating, adjacent wall and behind-the-fence photos:
  * one short live instruction, a manual shutter, an on-device check, and the same brief result card as the wall step.
  */
-type Props = { camera: ReturnType<typeof useCamera>; step: CheckedStep; sample: string; canUse?: boolean; cantUseReason?: string; onAccept: (p: Photo) => void };
+/** `extra`: a question shown on the result card (e.g. where the breaker box is); `canUse` = it's answered. */
+type Props = { camera: ReturnType<typeof useCamera>; step: CheckedStep; sample: string; extra?: ReactNode; canUse?: boolean; onAccept: (p: Photo) => void };
 type Still = { url: string; source: Photo['source'] };
 const LOOKING_FOR: Record<CheckedStep, string[]> = {
   breaker: ['The whole breaker box', 'Where it is'],
@@ -37,7 +38,8 @@ function liveMessage(m: FastMetrics | null, good: number, step: CheckedStep): { 
   return good >= 6 ? { tone: 'ready', text: READY[step] } : { tone: 'hold', text: 'Hold steady.' };
 }
 
-export function CheckedCapture({ camera, step, sample, canUse = true, cantUseReason, onAccept }: Props) {
+export function CheckedCapture({ camera, step, sample, extra, canUse = true, onAccept }: Props) {
+  const [nudge, setNudge] = useState(false);
   const [phase, setPhase] = useState<'live' | 'checking' | 'result'>('live');
   const [still, setStill] = useState<Still | null>(null);
   const [result, setResult] = useState<StepResult | null>(null);
@@ -98,9 +100,10 @@ export function CheckedCapture({ camera, step, sample, canUse = true, cantUseRea
     c.toBlob(b => { if (b) void check({ url: URL.createObjectURL(b), source: 'camera' }); }, 'image/jpeg', 0.92);
   }, [check]);
 
-  function retake() { run.current++; setResult(null); own(null); setPhase('live'); }
+  function retake() { run.current++; setResult(null); own(null); setNudge(false); setPhase('live'); }
   function use(override = false) {
     if (!still || !result) return;
+    if (!canUse) { setNudge(true); return; } // point at the unanswered question instead of doing nothing
     const s = still; stillRef.current = null; setStill(null);
     onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: result.accepted, meterNumber: null, reasons: result.accepted ? [] : [result.line], override, ...(result.note ? { details: result.note } : {}), ...(result.amps ? { amps: result.amps } : {}) } });
   }
@@ -127,18 +130,19 @@ export function CheckedCapture({ camera, step, sample, canUse = true, cantUseRea
       </div>
     </>}
 
-    {phase === 'result' && r && <div ref={resultRef} className={`meter-result compact ${r.accepted ? 'accepted' : 'rejected'}`}>
-      <div className="result-line">{r.accepted ? <CircleCheck size={22} /> : <CircleAlert size={22} />}<h3>{r.accepted ? 'Photo accepted' : 'Retake needed'}</h3></div>
-      <p className="fix-line">{r.line}</p>
+    {phase === 'result' && r && <div ref={resultRef} className={`meter-result compact ${!r.accepted ? 'rejected' : r.improve ? 'improve' : 'accepted'}`}>
+      <div className="result-line">{r.accepted && !r.improve ? <CircleCheck size={22} /> : <CircleAlert size={22} />}<h3>{!r.accepted ? 'Retake needed' : r.improve ? 'Accepted — one more try could be better' : 'Photo accepted'}</h3></div>
+      <p className="fix-line">{r.improve ?? r.line}</p>
       <ul className="goal-chips" aria-label="What we found">{r.chips.map(c => <li key={c.label} className={c.state}>{c.state === 'pass' ? <Check size={13} /> : c.state === 'info' ? <Info size={13} /> : <CircleAlert size={13} />}{c.label}</li>)}</ul>
       {still?.source === 'sample' && <p className="sample-disclaimer">Example from Base’s photo guide — not your home.</p>}
-      {r.accepted && !canUse && cantUseReason && <p className="inline-message">{cantUseReason}</p>}
+      {extra && <div className={`result-extra ${nudge && !canUse ? 'attention' : ''}`}>{extra}</div>}
       <div className="confirm-actions">
-        {r.accepted ? <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" disabled={!canUse} onClick={() => use()}><Check size={17} /> Use this photo</button></>
-          : <button className="button primary" onClick={retake}><RotateCcw size={16} /> Retake</button>}
+        {!r.accepted ? <button className="button primary" onClick={retake}><RotateCcw size={16} /> Retake</button>
+          : r.improve ? <><button className="button" onClick={() => use()}><Check size={16} /> Use it</button><button className="button primary" onClick={retake}><RotateCcw size={16} /> Retake</button></>
+          : <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" onClick={() => use()}><Check size={17} /> Use this photo</button></>}
       </div>
-      {!r.accepted && rejections >= REJECTIONS_BEFORE_OVERRIDE && <button className="text-button override-link" disabled={!canUse} onClick={() => use(true)}><Send size={14} /> Still stuck? Send it for Base’s team to review.</button>}
-      <details className="all-checks"><summary>Details</summary><p className="purpose">{r.details}</p></details>
+      {!r.accepted && rejections >= REJECTIONS_BEFORE_OVERRIDE && <button className="text-button override-link" onClick={() => use(true)}><Send size={14} /> Still stuck? Send it for Base’s team to review.</button>}
+      <details className="all-checks"><summary>Details</summary><p className="purpose">{r.details}</p>{r.improve && <p className="purpose">{r.line}</p>}</details>
     </div>}
 
     <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="sr-only" tabIndex={-1} aria-label="Choose a photo from your device"
