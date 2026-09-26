@@ -35,6 +35,56 @@ export type PackId =
   | 'DALLAS_ONCOR'
   | 'UNKNOWN_PACK';
 
+export type ActivationRoute = 'AUSTIN_UTILITY_MANAGED' | 'ERCOT_ADER' | 'BOTH' | 'UNKNOWN';
+export type ActivationGateKey =
+  | 'AUSTIN_INSPECTION'
+  | 'INTERCONNECTION_PTO'
+  | 'ERCOT_REGISTRATION'
+  | 'TELEMETRY'
+  | 'DISPATCH_QUALIFICATION'
+  | 'ANCILLARY_SERVICES';
+export type ActivationSource = 'AUSTIN_ENERGY' | 'ERCOT' | 'INSTALLER' | 'QSE' | 'CUSTOMER';
+export type ActivationGateStatus = 'NOT_STARTED' | 'SUBMITTED' | 'QUESTIONS' | 'FAILED' | 'ACCEPTED';
+export type ExternalEventType = 'FEEDBACK' | 'ACKNOWLEDGED' | 'ASSIGNED' | 'TASK_CREATED' | 'STATUS_CHANGED';
+
+export type ActivationGate = {
+  key: ActivationGateKey;
+  label: string;
+  source: ActivationSource;
+  status: ActivationGateStatus;
+  owner?: string;
+  dueAt?: number;
+  externalRef?: string;
+  issue?: string;
+  nextAction?: string;
+  updatedAt: number;
+};
+
+export type ExternalEvent = {
+  id: string;
+  type: ExternalEventType;
+  source: ActivationSource;
+  message: string;
+  timestamp: number;
+  gateKey?: ActivationGateKey;
+  acknowledged: boolean;
+  assignedOwner?: string;
+};
+
+export type ActivationSummary = {
+  route: ActivationRoute;
+  currentGate?: ActivationGateKey;
+  currentLabel?: string;
+  source?: ActivationSource;
+  status?: ActivationGateStatus;
+  owner?: string;
+  overdue: boolean;
+  correctionNeeded: boolean;
+  awaitingExternal: boolean;
+  telemetryPending: boolean;
+  dispatchReady: boolean;
+};
+
 export type Citation = {
   label: string;
   url?: string;
@@ -94,6 +144,9 @@ export type CaseRecord = {
   plan: PlanNode[];
   why: Finding[]; // reconciled findings
   sitePhotos?: SitePhoto[];
+  activationRoute: ActivationRoute;
+  activationGates: ActivationGate[];
+  externalEvents: ExternalEvent[];
 };
 
 export type AdminToggles = {

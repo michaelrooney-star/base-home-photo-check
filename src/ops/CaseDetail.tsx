@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { StatusPill, statusLabel, statusTone } from '../components/ConsoleShell';
 import { PlanDAG } from './PlanDAG';
 import type { PlanNodeVM } from './PlanDAG';
+import { ActivationReadiness } from './ActivationReadiness';
+import type { ActivationGateVM, ExternalEventVM } from './ActivationReadiness';
 
 type Finding = { domain: string; summary: string; citations: { label: string; url?: string }[]; requirement?: string; ruleIds?: string[] };
 type PlanNodeRaw = { id: string; worker: 'resolve_pack' | 'city' | 'electrical' | 'fire' | 'utility_rules' | 'reconcile'; wave: 0 | 1 | 2; dependsOn: string[]; state: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'; result?: { status: 'ok' | 'failed'; attempts: number; error?: string; findings?: Finding[]; degraded?: boolean } };
-type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; county?: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[]; sitePhotos?: { id: string; title: string; src: string; note: string }[] };
+type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; county?: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[]; sitePhotos?: { id: string; title: string; src: string; note: string }[]; activationRoute: string; activationGates: ActivationGateVM[]; externalEvents: ExternalEventVM[] };
 
 export function CaseDetail() {
   const { userId, caseId } = useParams();
@@ -46,6 +48,8 @@ export function CaseDetail() {
 
     <div className="console-workflow-heading"><div><p className="console-eyebrow"><span /> WORKFLOW PLAN</p><h2>Research path</h2></div><span>Click a worker to inspect its evidence and run state.</span></div>
     <div className="console-workflow-card"><div className="console-dag"><PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} /></div></div>
+
+    <ActivationReadiness caseId={rec.id} route={rec.activationRoute} gates={rec.activationGates} events={rec.externalEvents} onChange={load} />
 
     <details className="console-plan-list" role="group"><summary><span><strong>Plan list</strong><small>Accessible workflow summary</small></span><span>{rec.plan.length} workers</span></summary><ul>{rec.plan.map((n) => <li key={n.id}><button onClick={() => onSelectNode(n.id)}>{n.worker.replaceAll('_', ' ')}</button><span>Wave {n.wave}</span><StatusPill tone={n.state === 'DONE' ? 'ready' : n.state === 'FAILED' ? 'danger' : n.state === 'RUNNING' ? 'queued' : 'muted'}>{n.state === 'PENDING' ? 'Queued' : statusLabel(n.state)}</StatusPill></li>)}</ul></details>
 

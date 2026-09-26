@@ -4,7 +4,8 @@ import { prettyJSON } from 'hono/pretty-json';
 import { resetStore, listCasesByAssignee, getCase, saveCase } from './store';
 import { seedDemoCases, deriveUtilityType, resolvePack } from './seed';
 import { planAndRun } from './runner';
-import type { CreateCaseBody } from './types';
+import { activationSummary, allowedGateStatus, makeActivationState } from './activation';
+import type { ActivationGateKey, ActivationGateStatus, CreateCaseBody, ExternalEventType } from './types';
 
 export function createApp() {
   const app = new Hono().basePath('/api');
@@ -19,7 +20,10 @@ export function createApp() {
     seedDemoCases();
     const { userId } = c.req.param();
     const list = listCasesByAssignee(userId);
-    return c.json({ userId, cases: list });
+    const cases = list
+      .map((item) => ({ ...item, activationSummary: activationSummary(item.activationRoute, item.activationGates) }))
+      .sort((a, b) => Number(b.activationSummary.overdue || b.activationSummary.correctionNeeded) - Number(a.activationSummary.overdue || a.activationSummary.correctionNeeded));
+    return c.json({ userId, cases });
   });
 
   app.get('/ops/cases/:caseId', async (c) => {
@@ -55,6 +59,8 @@ export function createApp() {
       degraded: false,
       plan: [],
       why: [],
+      activationRoute: 'UNKNOWN' as const,
+      ...makeActivationState('UNKNOWN', 'AUSTIN_WAIT'),
     };
     saveCase(rec);
     return c.json(rec, 201);
@@ -65,6 +71,58 @@ export function createApp() {
     const updated = await planAndRun(caseId);
     if (!updated) return c.json({ error: 'not_found' }, 404);
     return c.json(updated);
+  });
+
+  app.post('/ops/cases/:caseId/activation/events/:eventId/acknowledge', (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const event = rec.externalEvents.find((item) => item.id === c.req.param('eventId'));
+    if (!event) return c.json({ error: 'event_not_found' }, 404);
+    event.acknowledged = true;
+    rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'ACKNOWLEDGED', source: event.source, gateKey: event.gateKey, message: `Feedback acknowledged: ${event.message}`, timestamp: Date.now(), acknowledged: true });
+    saveCase(rec);
+    return c.json(rec);
+  });
+
+  app.post('/ops/cases/:caseId/activation/gates/:gateKey/assign', async (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const gate = rec.activationGates.find((item) => item.key === c.req.param('gateKey'));
+    if (!gate) return c.json({ error: 'gate_not_found' }, 404);
+    const body = (await c.req.json()) as { owner?: string };
+    if (!body.owner) return c.json({ error: 'owner_required' }, 400);
+    gate.owner = body.owner;
+    gate.updatedAt = Date.now();
+    rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'ASSIGNED', source: gate.source, gateKey: gate.key, message: `${gate.label} assigned to ${body.owner}.`, timestamp: gate.updatedAt, acknowledged: true, assignedOwner: body.owner });
+    saveCase(rec);
+    return c.json(rec);
+  });
+
+  app.post('/ops/cases/:caseId/activation/gates/:gateKey/advance', async (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const gate = rec.activationGates.find((item) => item.key === c.req.param('gateKey'));
+    if (!gate) return c.json({ error: 'gate_not_found' }, 404);
+    const body = (await c.req.json()) as { status?: ActivationGateStatus; message?: string };
+    if (!body.status || !allowedGateStatus(gate.status).includes(body.status)) return c.json({ error: 'invalid_status_transition', allowed: allowedGateStatus(gate.status) }, 400);
+    const previous = gate.status;
+    gate.status = body.status;
+    gate.updatedAt = Date.now();
+    rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'STATUS_CHANGED', source: gate.source, gateKey: gate.key, message: body.message ?? `${gate.label} moved from ${previous} to ${body.status}.`, timestamp: gate.updatedAt, acknowledged: true, assignedOwner: gate.owner });
+    saveCase(rec);
+    return c.json(rec);
+  });
+
+  app.post('/ops/cases/:caseId/activation/gates/:gateKey/task', (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const gate = rec.activationGates.find((item) => item.key === c.req.param('gateKey'));
+    if (!gate) return c.json({ error: 'gate_not_found' }, 404);
+    const now = Date.now();
+    rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'TASK_CREATED', source: gate.source, gateKey: gate.key, message: gate.nextAction ?? gate.issue ?? `Follow up on ${gate.label}.`, timestamp: now, acknowledged: true, assignedOwner: gate.owner });
+    gate.updatedAt = now;
+    saveCase(rec);
+    return c.json(rec);
   });
 
   // Admin

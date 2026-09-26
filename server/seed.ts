@@ -7,6 +7,7 @@ import {
   PlanNode,
   SitePhoto,
 } from './types';
+import { makeActivationState, type ActivationScenario } from './activation';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -130,11 +131,16 @@ function newCase(
   fp: CaseFingerprint,
   pack: PackId,
   photoSet: 'set-a' | 'set-b' | 'set-c' = 'set-a',
-  stage: 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED' | 'UNKNOWN' = 'QUEUED'
+  stage: 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED' | 'UNKNOWN' = 'QUEUED',
+  activationRoute: CaseRecord['activationRoute'] = 'UNKNOWN',
+  activationScenario?: ActivationScenario,
 ): CaseRecord {
   const id = uid();
   const unknown = pack === 'UNKNOWN_PACK' || stage === 'UNKNOWN';
   const status = unknown ? 'UNKNOWN' : stage === 'DEGRADED' ? 'OPS_READY' : stage;
+  const activation = activationScenario
+    ? makeActivationState(activationRoute, activationScenario)
+    : { activationGates: [], externalEvents: [] };
   return {
     id,
     created_at: Date.now(),
@@ -147,6 +153,8 @@ function newCase(
     plan: stage === 'QUEUED' || unknown ? [] : stagedPlan(stage),
     why: packCitations[pack] ?? [],
     sitePhotos: mockSitePhotos(photoSet),
+    activationRoute,
+    ...activation,
   };
 }
 
@@ -196,7 +204,13 @@ export function seedDemoCases() {
       city: 'Austin',
       utility: 'Austin Energy',
     });
-    const rec = newCase('ops_maya', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'DEGRADED', 'QUEUED', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED');
+    const activation = [
+      ['AUSTIN_UTILITY_MANAGED', 'AUSTIN_WAIT'],
+      ['ERCOT_ADER', 'ERCOT_CORRECTION'],
+      ['ERCOT_ADER', 'TELEMETRY_PENDING'],
+      ['ERCOT_ADER', 'DISPATCH_READY'],
+    ][i] as [CaseRecord['activationRoute'], ActivationScenario] | undefined;
+    const rec = newCase('ops_maya', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'DEGRADED', 'QUEUED', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED', activation?.[0], activation?.[1]);
     cases.push(rec);
   }
 
