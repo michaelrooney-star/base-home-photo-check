@@ -43,14 +43,21 @@ export function guide(i: LiveInput): Guidance {
   if (subject.status === 'ok' && subject.probs.electric_meter < CRITERIA.minElectricMeter) return out('search', subjectCheck(subject).message ?? MESSAGES.point);
   // Glare only matters once we've tried and failed to read the number (white nameplates often clip anyway).
   if (m.glare > CRITERIA.maxGlare && obs && !readable) return out('adjust', MESSAGES.glare);
+  // Two reads already agree on every digit: a proven frame is buffered (best.ts), so capture now even if the phone
+  // wobbles at this instant. Only light and the subject check (above) still apply.
+  const agreed = !!obs && obs.meter_number_visible && obs.all_characters_certain && obs.number_fully_in_frame
+    && !obs.issues.includes('obstructed') && obs.number_height_ratio * reading!.regionHeightPx >= CRITERIA.minDigitPx;
+  if (agreed) return out('ready', MESSAGES.ready, true);
   if (m.motion > CRITERIA.maxMotion) return out('adjust', MESSAGES.steady);
   if (!inFocus(m)) return out('adjust', MESSAGES.blurry);
   if (!obs) return out('search', subject.status === 'ok' ? MESSAGES.hold : MESSAGES.point);
   if (!obs.meter_number_visible) return out('adjust', MESSAGES.notFound);
   if (obs.issues.includes('obstructed')) return out('adjust', MESSAGES.obstructed);
   if (!obs.number_fully_in_frame) return out('adjust', MESSAGES.cutOff);
-  if (!obs.all_characters_certain) return out('hold', MESSAGES.uncertain);
   if (!bigEnough) return out('adjust', MESSAGES.small);
+  // Number in view and close enough, but not yet read twice the same way: once the phone is steady, take the photo
+  // anyway. The final check reads it more carefully (two sizes), and a clear photo is accepted for Base to read.
+  if (!obs.all_characters_certain) return i.goodFrames >= CRITERIA.readyFrames ? out('ready', MESSAGES.ready, true) : out('hold', MESSAGES.uncertain);
   // Number is readable. Capture without waiting for meter recognition to finish loading: the saved photo is checked
   // again, and if recognition still isn't available it's marked for reviewers rather than rejected.
   return i.goodFrames >= CRITERIA.readyFrames ? out('ready', MESSAGES.ready, true) : out('hold', MESSAGES.hold);

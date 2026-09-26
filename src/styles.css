@@ -250,3 +250,11 @@
 .space-object.label-inside em{transform:none;border-radius:0 0 6px 0}
 .space-open em{background:#15803d;top:auto;bottom:-3px;transform:none;border-radius:0 6px 0 6px}
 .space-object.label-right em{left:auto;right:-3px;border-radius:6px 6px 0 6px}
+.camera-app{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);z-index:3;display:flex;gap:6px;align-items:center;white-space:nowrap;padding:9px 14px;border-radius:20px;border:0;background:#fff;color:#1f261f;font-size:14px;font-weight:600;box-shadow:0 2px 10px #0006;cursor:pointer}
+.camera-app-result{width:100%;margin-top:10px;justify-content:center}
+/* To-scale battery outline on the whole-wall photo */
+.battery-template{position:absolute;z-index:2;pointer-events:none}
+.battery-template>span{position:absolute;box-sizing:border-box}
+.bt-box{border:3px solid #fff;background:#6b7280b3;box-shadow:0 0 0 1px #0008;border-radius:4px}
+.bt-clear{border:2px dashed #22c55e;background:#22c55e33}
+.bt-box em{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);white-space:nowrap;font-style:normal;font-size:12px;font-weight:700;color:#fff;background:#15803d;padding:2px 8px;border-radius:6px}

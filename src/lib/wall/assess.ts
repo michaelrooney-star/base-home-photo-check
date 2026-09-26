@@ -89,7 +89,7 @@ const FIX_ORDER = ['scene', 'meter', 'orientation', 'light', 'focus', 'wrongSide
 /** The photo failed only because the customer is too close / not enough wall beside the meter: offer "I can't step back any further". */
 export const spaceLimitedOnly = (d: WallDecision) => {
   const failed = d.checks.filter(c => c.state === 'fail').map(c => c.id);
-  return failed.length > 0 && failed.every(id => id === 'distance' || id === 'sides' || id === 'direction') && !d.reasons.some(r => r.startsWith('This shows the area'));
+  return failed.length > 0 && failed.every(id => id === 'distance' || id === 'sides' || id === 'direction') && !d.reasons.some(r => r.startsWith('Wrong side'));
 };
 
 export const wallInFocus = (m: FastMetrics) => m.sharpness >= C.minLiveSharpness && m.relSharpness >= C.minRelativeSharpness;

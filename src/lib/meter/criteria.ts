@@ -18,6 +18,9 @@ export const SUBJECT_PROMPTS: Record<SubjectClass, string[]> = {
   other: ['a photo of a wall of a house', 'a photo of a room', 'a photo of a person', 'a photo of a yard', 'a photo of an air conditioner unit', 'a photo of a window'],
 };
 
+/** Final check reads the photo at these long-edge sizes and lets the passes vote (text sizes vary from meter to meter). */
+export const READ_SIZES = [960, 1600];
+
 export const CRITERIA = {
   /** Electric-meter probability needed to count as "an electric meter is in view". */
   minElectricMeter: 0.5,
@@ -57,30 +60,30 @@ export const CHECK_LABELS: Record<CheckId, string> = {
   clear: 'Nothing covering the number',
 };
 
+/** Short on purpose: the customer is holding a phone at a meter and can take in a few words at a glance. */
 export const MESSAGES = {
   // subject
-  point: 'Point your camera at the electric meter.',
-  gas: 'That looks like a gas meter. Find the electric meter — it has a round glass cover and a display.',
-  water: 'That looks like a water meter. Find the electric meter — it has a round glass cover and a display.',
-  panel: 'That looks like a breaker panel. For this photo we need the electric meter outside your home.',
-  other: 'We can’t see an electric meter. Fit the meter inside the circle.',
-  subjectUnavailable: 'We couldn’t confirm this is an electric meter because meter recognition didn’t load. Check your connection and try again.',
+  point: 'Point at the electric meter.',
+  gas: 'That’s a gas meter — find the electric one.',
+  water: 'That’s a water meter — find the electric one.',
+  panel: 'That’s a breaker box — find the electric meter.',
+  other: 'Fit the meter in the circle.',
+  subjectUnavailable: 'Couldn’t check it’s a meter — try again.',
   // quality
-  dark: 'It’s too dark. Try again in daylight or with more light on the meter.',
-  glare: 'Glare is covering part of the meter. Step a little to one side to move the reflection.',
+  dark: 'Too dark — more light needed.',
+  glare: 'Glare — step to one side.',
   steady: 'Hold steady.',
-  blurry: 'The photo is blurry. Hold steady and give the camera a moment to focus — or step back slightly if you’re very close.',
+  blurry: 'Blurry — hold steady.',
   // number
-  notFound: 'We can’t find the meter number yet. Move closer so the meter fills the circle.',
-  notFoundFinal: 'We couldn’t find the meter number. Move closer so the meter fills the circle, then try again.',
-  uncertain: 'Almost there — reading every digit…',
-  uncertainFinal: 'We found the meter number but couldn’t read every digit. Move a little closer and hold steady.',
-  small: 'Move a little closer so the meter number is easier to read.',
-  cutOff: 'Part of the meter number is outside the photo. Keep the whole meter inside the circle.',
-  obstructed: 'Something may be covering the meter number. Clear the view and try again.',
+  notFound: 'Move closer.',
+  notFoundFinal: 'Couldn’t find the number — move closer.',
+  uncertain: 'Reading the number…',
+  uncertainFinal: 'Couldn’t read every digit — move closer.',
+  small: 'Move a little closer.',
+  cutOff: 'Keep the whole meter in the circle.',
+  obstructed: 'Something is covering the number.',
   // states
   loading: 'Getting ready…',
-  hold: 'Reading the meter number…',
-  tapHint: 'Or tap the button to take the photo yourself.',
-  ready: 'Looks good! Taking the photo…',
+  hold: 'Reading the number…',
+  ready: 'Got it — taking the photo…',
 } as const;

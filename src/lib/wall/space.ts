@@ -162,9 +162,46 @@ export function describeSpace(f: SpaceFinding): string {
 }
 
 /** What the customer reads on the result card. */
+/** "an AC unit on the left and a large cabinet on the right" — the nearest thing in the way on each side, or null. */
+export function inTheWay(f: SpaceFinding): string | null {
+  const things = f.sides.map(s => f.nearest[s] && `${withArticle(f.nearest[s]!.name)} on the ${s}`).filter(Boolean);
+  return things.length ? things.join(' and ') : null;
+}
+
+/** One short line for the result card when there's no room by the meter: what's in the way, and what happens next. */
+export function noRoomLine(f: SpaceFinding): string {
+  const what = inTheWay(f);
+  return what ? `No room by the meter: ${what}. We’ll check along the wall next.` : 'No open wall by the meter. We’ll check along the wall next.';
+}
+
 export function customerSpaceText(f: SpaceFinding): string {
   if (f.spot) return `Good news: about ${round(f.spot.ft!)}${f.spot.open ? '+' : ''} ft of open wall to the ${f.spot.side} of your meter.`;
   const things = f.sides.map(s => f.nearest[s] && `${withArticle(f.nearest[s]!.name)} on the ${s}`).filter(Boolean);
   if (f.sides.length === 2) return things.length ? `There’s ${things.join(' and ')} of your meter. Next, we’ll look along the wall for open space.` : 'The meter, the wall around it and the ground are in view.';
   return `No open wall to the ${f.sides[0]} of your meter in this photo${things.length ? ` (${things[0]})` : ''}.`;
+}
+
+/** Base: battery 38 in wide, 36.25 in tall; 3 ft of clearance on both sides (≈9 ft of wall in all). */
+export const BATTERY = { widthIn: 38, heightIn: 36.25, clearanceFt: 3 };
+export type Template = { x0: number; x1: number; bx0: number; bx1: number; top: number; ground: number; fits: boolean };
+
+/**
+ * A to-scale outline of a battery and its side clearances, drawn on the whole-wall photo using the meter cover as a
+ * ruler: centred on the open stretch we found (or the widest one), standing on the ground about 4½ ft below the meter
+ * centre (meters are mounted 4–6 ft up). Shares of photo width/height. `fits`: nothing detected inside the outline.
+ */
+export function batteryTemplate(f: SpaceFinding, m: MeterSpot, width: number, height: number): Template | null {
+  if (!m.r) return null;
+  const pxPerIn = (2 * m.r * height) / C.meterCoverInches;
+  const w = (BATTERY.widthIn * pxPerIn) / width, clear = (BATTERY.clearanceFt * 12 * pxPerIn) / width;
+  // Where to draw it: the nearest stretch the whole outline fits in, else the widest stretch (it'll show what's in the way).
+  const need = w + 2 * clear;
+  const fitting = f.stretches.filter(t => t.x1 - t.x0 >= need).sort((a, b) => (a.gapFt ?? 0) - (b.gapFt ?? 0));
+  const target = fitting[0] ?? [...f.stretches].sort((a, b) => (b.x1 - b.x0) - (a.x1 - a.x0))[0];
+  if (!target) return null;
+  const cx = (target.x0 + target.x1) / 2;
+  const ground = Math.min(1, m.y + (54 * pxPerIn) / height), top = ground - (BATTERY.heightIn * pxPerIn) / height;
+  const x0 = cx - w / 2 - clear, x1 = cx + w / 2 + clear;
+  const fits = !!fitting.length && x0 >= 0 && x1 <= 1 && !f.blockers.some(b => b.x1 > x0 && b.x0 < x1);
+  return { x0, x1, bx0: cx - w / 2, bx1: cx + w / 2, top, ground, fits };
 }

@@ -83,5 +83,25 @@
   "not_meter_rating.jpg": {
     "expect": "not_meter",
     "why": "main disconnect rating, not a meter"
+  },
+  "real_205_austin.jpg": {
+    "expect": "pass",
+    "number": "AE 6106892",
+    "why": "real Austin Energy meter (iPhone photo); number has an \"AE\" prefix and other numbers share the plate"
+  },
+  "real_205_austin_circle.jpg": {
+    "expect": "pass",
+    "number": "AE 6106892",
+    "why": "same meter cropped to the guide circle, as the app captures it"
+  },
+  "real_203_austin.jpg": {
+    "expect": "pass",
+    "number": "AE 6136370",
+    "why": "real Austin Energy meter (iPhone photo); number has an \"AE\" prefix and other numbers share the plate"
+  },
+  "real_203_austin_circle.jpg": {
+    "expect": "pass",
+    "number": "AE 6136370",
+    "why": "same meter cropped to the guide circle, as the app captures it"
   }
 }
