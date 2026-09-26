@@ -36,10 +36,10 @@ function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolea
   for (const n of nodes) byWave[n.wave].push(n);
 
   // sizes
-  const colGap = 64;
-  const rowGap = 16;
-  const nodeW = isMobile ? Math.max(220, containerWidth - 24) : 220;
-  const nodeH = 60; // ≥44px touch target
+  const colGap = isMobile ? 40 : 36;          // 32–48px between columns
+  const rowGap = isMobile ? 12 : 12;          // 12–16px between siblings
+  const nodeW = isMobile ? Math.max(220, containerWidth - 24) : 150; // desktop ~150px
+  const nodeH = isMobile ? 56 : 40;           // mobile ≥44; desktop 40 (click hit padded to ≥44)
 
   const columns = isMobile ? 1 : 3;
   const colWidth = nodeW;
@@ -155,7 +155,7 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
             ))}
         </svg>
 
-        {/* Absolutely positioned HTML nodes using the same layout map */}
+      {/* Absolutely positioned HTML nodes using the same layout map */}
         {nodes.map((n) => {
           const p = layout.pos[n.id];
           const colors = nodeColor(n);
@@ -165,28 +165,28 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
             <button
               key={n.id}
               onClick={() => onSelectNode(n.id)}
-              className="absolute text-left rounded border px-3 py-3 focus:outline-none"
+            className="absolute text-left rounded border px-2 py-2 focus:outline-none"
               style={{
                 background: colors.bg,
                 borderColor: colors.border,
                 left: p.x,
                 top: p.y,
                 width: layout.nodeW,
-                minHeight: layout.nodeH,
+              minHeight: Math.max(layout.nodeH, 44), // keep desktop hit target ≥44
               }}
               aria-label={`${n.worker} ${visual.label}`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Icon size={20} className={visual.colorClass + (visual.spin ? ' animate-spin' : '')} />
-                  <div className="font-medium capitalize">{n.worker.replace('_', ' ')}</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Icon size={16} className={visual.colorClass + (visual.spin ? ' animate-spin' : '')} />
+                <div className="font-medium capitalize truncate">{n.worker.replace('_', ' ')}</div>
                 </div>
                 {n.degraded && n.worker === 'utility_rules' ? (
-                  <span className="ml-2 inline-block rounded bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5">degraded</span>
+                <span className="ml-2 inline-block rounded bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5">degraded</span>
                 ) : null}
-              </div>
-              <div className="text-xs mt-0.5">
-                {n.state === 'PENDING' ? 'Queued' : n.state === 'DONE' && n.conflict ? 'Needs review' : n.state.toLowerCase()}
+              <span className="text-[11px] text-gray-700 shrink-0">
+                {shortStatus(n)}
+              </span>
               </div>
               {(n.failed || n.state === 'FAILED' || n.conflict) && (
                 <span className="absolute -inset-0.5 rounded ring-2 ring-red-500 animate-pulse pointer-events-none" />
@@ -269,6 +269,15 @@ function LegendItem({ icon, label }: { icon: React.ReactNode; label: string }) {
       <span>{label}</span>
     </div>
   );
+}
+
+function shortStatus(n: PlanNodeVM): string {
+  if (n.state === 'FAILED' || n.failed) return 'fail';
+  if (n.conflict || (n.degraded && n.worker === 'utility_rules')) return 'review';
+  if (n.state === 'DONE') return 'done';
+  if (n.state === 'RUNNING') return 'run';
+  if (n.state === 'PENDING') return 'queued';
+  return 'unk';
 }
 
 // Helpers: desktop bus layout
