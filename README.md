@@ -180,6 +180,31 @@ The explanations are behind "Details", and the card scrolls itself into view.
 - Meters without a round cover, very distant meters (cover under ~1 % of the photo height), or meters in deep shade may not be found automatically; the tap covers these.
 - The app doesn't check that the photo is the *meter's* wall versus another wall; the confirmed meter is the evidence.
 
+## The checklist
+
+The checklist is grouped by what Base needs to know, not listed as eight fixed photos (`src/lib/checklist.ts`, `src/components/PhotoChecklist.tsx`):
+
+- **Your meter:** the meter number close-up, showing the number read ("Meter 149 214 094").
+- **Space for the battery:**
+  - the whole wall;
+  - the two photos along the wall, in the order the survey takes them;
+  - around the corner;
+  - behind the fence.
+  
+  Each row says what it found ("Open wall, about 4+ ft left", "No open wall here"). Photos the survey no longer needs are struck through as "Not needed". The fence row only counts once the customer says there is a fence.
+- **Your electrical panel:** the breaker box (and where it is) and the main breaker rating ("Reads 200 A").
+
+Progress counts only the photos still expected, so "2 of 5" really means three to go. On a phone the sidebar becomes a thin Meter · Space · Panel bar above the camera; tapping a section jumps to its next photo.
+
+## Breaker box, rating, around the corner, behind the fence
+
+These steps use one shared screen (`src/components/CheckedCapture.tsx`): a single live instruction (light, steadiness, focus), a shutter, an on-device check, and the same brief result card as the wall. The decisions live in `src/lib/panel/steps.ts`, the pipeline in `src/lib/panel/analyze.ts`.
+
+- **Breaker box:** the photo-recognition model checks that it's a breaker panel. If it's the meter instead, it says "That's your meter — now show the breaker box." If recognition isn't available, the photo is accepted and marked unchecked. The location question is still required.
+- **Main breaker rating:** the same text reader as the meter number reads the number stamped on the handle (`src/lib/panel/amps.ts`). It only accepts real breaker sizes (60–400 A) read with high confidence, and retries with the photo turned both ways because some handles are stamped sideways. The result shows "Reads 200 A" and the amps are saved with the photo. `npm run eval:panel` checks the reader on close-ups cut from Base's guide photo, one of them sideways; photos taken from too far away are correctly not read (5/5).
+- **Around the corner:** the object detector and ground check from the wall step, without a meter. The result lists what's on the wall ("On this wall: a door or window").
+- **Behind the fence:** checks the photo is outside, shows the ground, and is clear.
+
 ## Optional measurements: demo-only and unverified
 
 This is separate from required photos and never affects completion or eligibility.
@@ -224,7 +249,8 @@ Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-
 - `scripts/eval-wall.ts`: runs the wall pipeline in Node on real photos; `scripts/export-wall-detector.py` rebuilds the detector model.
 - `src/lib/meter/`: meter photo check — `criteria.ts` (rules and copy), `guidance.ts` (live instruction), `acceptance.ts` (accept/reject), `number.ts` (pick the meter number from OCR lines), `image.ts` / `metrics.ts` (image measurements), `frames.ts` (camera/photo plumbing), `analyzer.ts` + `analyzer.worker.ts` + `clip.ts` (on-device models).
 - `scripts/eval-meter.ts`: runs the meter check in Node against labeled photos.
-- `src/components/PhotoChecklist.tsx`: capture progress and navigation.
+- `src/components/PhotoChecklist.tsx` + `src/lib/checklist.ts`: the grouped, dynamic checklist and the phone section bar.
+- `src/components/CheckedCapture.tsx` + `src/lib/panel/`: breaker box, rating, around-the-corner and fence checks; `scripts/eval-panel.ts` checks the amp reader.
 - `src/components/OptionalEstimate.tsx`: separate gated manual point-selection workflow.
 - `src/components/Review.tsx`: evidence review, observations, and result states.
 - `src/lib/useCamera.ts` + `src/lib/lens.ts`: camera lifecycle, cancellation and the 0.5× lens toggle.

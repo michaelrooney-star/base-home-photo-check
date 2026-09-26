@@ -2,7 +2,7 @@ import { planWall, skippable, type SpaceSummary } from './wall/survey.ts';
 export type PhotoId = 'meter' | 'wall' | 'right' | 'left' | 'adjacent' | 'fence' | 'breaker' | 'rating';
 export type Answer = 'yes' | 'no' | 'unsure' | null;
 /** Result of the automatic meter-photo check. `override` = customer sent it anyway after rejections. */
-export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string; limitedSpace?: boolean; space?: SpaceSummary };
+export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string; limitedSpace?: boolean; space?: SpaceSummary; amps?: number };
 export type Photo = { url: string; source: 'camera' | 'upload' | 'sample'; status: 'confirmed' | 'retake'; warnings: string[]; check?: PhotoCheck };
 export type Photos = Partial<Record<PhotoId, Photo>>;
 export type PhotoStep = { id: PhotoId; title: string; instruction: string; tip: string; sample: string };
@@ -15,14 +15,15 @@ export const STEPS: PhotoStep[] = [
   {id:'adjacent', title:'Adjacent wall', instruction:'Show the wall around the nearest corner, from corner to corner.', tip:'Include the ground and any nearby objects.', sample:'/images/adjacent.png'},
   {id:'fence', title:'Behind fence', instruction:'Show the full area behind the fence, from corner to corner.', tip:'Stay on your property and only enter an area you can access safely.', sample:'/images/fence.png'},
   {id:'breaker', title:'Main breaker box', instruction:'Show the whole main breaker box and where it is located.', tip:'Include enough of the surroundings to show its location. Keep the panel closed.', sample:'/images/breaker.png'},
-  {id:'rating', title:'Main disconnect rating', instruction:'Take a close, focused photo of the main switch rating, such as 125, 150, or 200 amps.', tip:'Only open the lid if it is safe and you can do so without touching wires. Otherwise skip this photo and ask Base for help.', sample:'/images/rating.png'},
+  {id:'rating', title:'Main disconnect rating', instruction:'Get close to the main switch so its number (like 100, 150 or 200) fills the box.', tip:'Only open the lid if it is safe and you can do so without touching wires. Otherwise skip this photo and ask Base for help.', sample:'/images/rating.png'},
 ];
 export function requiredSteps(fence: Answer) { return STEPS.filter(s => s.id !== 'fence' || fence === 'yes'); }
 export function completion(photos: Photos, fence: Answer, location: string) {
   const steps = requiredSteps(fence);
   const skip = skippable(photos) as PhotoId[];
-  const complete = steps.filter(s => photos[s.id]?.status === 'confirmed' || skip.includes(s.id)).length;
-  return { total: steps.length, complete, ready: complete === steps.length && (fence === 'yes' || fence === 'no') && !!location };
+  const needed = steps.filter(s => !skip.includes(s.id)); // photos the survey no longer needs don't count
+  const complete = needed.filter(s => photos[s.id]?.status === 'confirmed').length;
+  return { total: needed.length, complete, ready: complete === needed.length && (fence === 'yes' || fence === 'no') && !!location };
 }
 /**
  * The step after `current`. The meter-wall photos follow the survey plan (wall/survey.ts): look along the more
@@ -30,12 +31,13 @@ export function completion(photos: Photos, fence: Answer, location: string) {
  */
 export function nextStep(current: PhotoId, photos: Photos, fence: Answer): PhotoId | null {
   const order = STEPS.filter(s => s.id !== 'fence' || !(fence === 'no' || fence === 'unsure')).map(s => s.id);
+  const skip = skippable(photos) as PhotoId[];
+  const after = (id: PhotoId) => order.slice(order.indexOf(id) + 1).find(x => !skip.includes(x)) ?? null;
   if (current === 'wall' || current === 'right' || current === 'left') {
     const todo = planWall(photos).todo.filter(s => s !== current);
-    if (current === 'wall' || todo.length) return todo[0] ?? 'adjacent';
-    return 'adjacent';
+    return todo[0] ?? after('left');
   }
-  return order[order.indexOf(current) + 1] ?? null;
+  return after(current);
 }
 export function revokePhoto(photo?: Photo) { if (photo?.url.startsWith('blob:')) URL.revokeObjectURL(photo.url); }
 export async function inspectPhoto(url: string): Promise<string[]> {

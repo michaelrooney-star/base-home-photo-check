@@ -18,8 +18,8 @@ export type SpaceSummary = {
 export type WallPlan = {
   /** Side photos still worth taking, in order. */
   todo: Side[];
-  /** Side photos we can skip, with why. */
-  notNeeded: Partial<Record<Side, string>>;
+  /** Photos we can skip (a side, or the adjacent wall), with why. */
+  notNeeded: Partial<Record<Side | 'adjacent', string>>;
   /** Instruction for the next photo of each kind (replaces the generic one). */
   hints: Partial<Record<Side | 'adjacent', string>>;
   /** Where a spot was found, if anywhere. */
@@ -54,6 +54,7 @@ export function planWall(photos: Photos): WallPlan {
       plan.hints[s] = `We spotted open wall to the ${s} of your meter. Stand back and face along the wall to the ${s}, so we can see the ground in front of it.`;
       plan.notNeeded[other(s)] = `Open wall found to the ${s} of the meter`;
     }
+    plan.notNeeded.adjacent = 'Open wall found near the meter';
     plan.summary = `Possible battery spot: about ${Math.round(plan.spot.ft)}${plan.spot.open ? '+' : ''} ft of clear wall ${plan.spot.side} of the meter (${plan.spot.photo === 'wall' ? 'whole-wall photo' : `${plan.spot.photo}-side photo`}).`;
     return plan;
   }
@@ -78,7 +79,8 @@ export function planWall(photos: Photos): WallPlan {
 }
 
 /** Side photos the customer can skip. */
-export const skippable = (photos: Photos): Side[] => (Object.keys(planWall(photos).notNeeded) as Side[]).filter(s => !done(photos, s));
+export const skippable = (photos: Photos): (Side | 'adjacent')[] =>
+  (Object.keys(planWall(photos).notNeeded) as (Side | 'adjacent')[]).filter(s => photos[s]?.status !== 'confirmed');
 
 /** The part of a clear-space finding worth saving with the photo. */
 export function summarizeSpace(f: SpaceFinding): SpaceSummary {

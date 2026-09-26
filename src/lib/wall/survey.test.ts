@@ -47,12 +47,17 @@ describe('nextStep and completion follow the plan', () => {
   it('goes from the wall to the promising side, and skips the other side once a spot is found', () => {
     const a: Photos = { wall: photo(openLeft) };
     expect(nextStep('wall', a, 'no')).toBe('left');
-    expect(nextStep('left', { ...a, left: photo(sideNone('left')) }, 'no')).toBe('adjacent');
+    expect(nextStep('left', { ...a, left: photo(sideNone('left')) }, 'no')).toBe('breaker'); // adjacent wall not needed either
     expect(nextStep('meter', a, 'no')).toBe('wall');
     expect(nextStep('adjacent', a, 'no')).toBe('breaker');
   });
-  it('counts a side photo that isn’t needed as complete', () => {
+  it('crowded wall: both sides, then the wall around the corner', () => {
+    const p: Photos = { wall: photo(crowded), left: photo(sideNone('left')) };
+    expect(nextStep('left', p, 'no')).toBe('right');
+    expect(nextStep('right', { ...p, right: photo(sideNone('right')) }, 'no')).toBe('adjacent');
+  });
+  it('drops photos that aren’t needed from the total', () => {
     const p: Photos = { wall: photo(openLeft), left: photo(sideNone('left')) };
-    expect(completion(p, 'no', 'garage').complete).toBe(3);
+    expect(completion(p, 'no', 'garage')).toMatchObject({ complete: 2, total: 5 }); // right and adjacent not needed
   });
 });

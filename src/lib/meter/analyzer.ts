@@ -42,7 +42,7 @@ export function mockScene(): ClassResult<(typeof SCENE_CLASSES)[number]> | null 
   const c = ((SCENE_CLASSES as readonly string[]).includes(q) ? q : 'house_wall') as (typeof SCENE_CLASSES)[number];
   return { status: 'ok', top: c, probs: Object.fromEntries(SCENE_CLASSES.map(k => [k, k === c ? 0.9 : 0.1 / 3])) as Record<(typeof SCENE_CLASSES)[number], number> };
 }
-function mockSubject(): SubjectResult | null {
+export function mockSubject(): SubjectResult | null {
   const q = param('subject');
   if (!q) return null;
   if (q === 'off') return { status: 'unavailable', error: 'disabled by ?subject=off' };
