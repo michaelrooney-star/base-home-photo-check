@@ -205,19 +205,24 @@ These steps use one shared screen (`src/components/CheckedCapture.tsx`): a singl
 - **Around the corner:** the object detector and ground check from the wall step, without a meter. The result lists what's on the wall ("On this wall: a door or window").
 - **Behind the fence:** checks the photo is outside, shows the ground, and is clear.
 
-## Optional measurements: demo-only and unverified
+## Review and finishing
 
-This is separate from required photos and never affects completion or eligibility.
+**Review** (`src/components/Review.tsx`) is grouped like the checklist: Your meter, Space for the battery, Your electrical panel. Each photo shows what was found ("Open wall, about 4+ ft left", "Reads 200 A") and has a Retake or Take photo button. Photos the survey skipped are single "not needed" lines.
 
-1. Enter an optional meter model, plus **verified width and height of the exact rectangular reference face**. A model alone does not provide scale. No model database or assumed standard dimensions are used.
-2. Confirm a clear, straight-on photo and that the reference face and target points occupy the **same flat wall plane**. A raised meter face and the wall behind it are different planes: that does not qualify. Round-meter bounding boxes do not establish a rectangular physical reference.
-3. Manually identify top-left, top-right, bottom-right, bottom-left corners and two distance endpoints. Click/tap the image or use keyboard-accessible pixel coordinate fields.
-4. OpenCV.js computes a planar homography with `getPerspectiveTransform`, transforms the endpoints with `perspectiveTransform`, and reports an **Approximate photo estimate**. It does not infer depth or identify corners automatically.
-5. Conservative *demo heuristics*, not metrology guarantees: convex ordered corners, reference edges >=100 original pixels, roughly right angles (80–100 degrees), opposite-side and dimension-ratio disagreement <=10%, target separation >=25 pixels, bounded extrapolation, finite transforms, and a ±2 pixel sensitivity check (suppress if variation exceeds 10%).
-6. Unknown dimensions, unclear/angled references, unmet plane confirmations, or unstable geometry return **Can't estimate reliably—Base team review needed.** Entering inaccurate dimensions or falsely confirming the plane can still produce inaccurate output; these observations are not verified facts.
-7. Every result is labeled approximate; manual correction and skip controls are available. Corrections are explicitly marked. Source/input changes invalidate the result. No confidence score, exact clearance, depth measurement, or compliance claim is invented.
+Below the photos is one short card:
+- solar panels, since homes with solar need a 200 A panel;
+- the fence and breaker location answers, pre-filled from the photo steps;
+- optional notes.
 
-Implementation references: [OpenCV homography](https://docs.opencv.org/4.13.0/d9/dab/tutorial_homography.html), [OpenCV.js geometric transformations](https://docs.opencv.org/4.13.0/dd/d52/tutorial_js_geometric_transformations.html), [OpenCV.js runtime/memory management](https://docs.opencv.org/4.13.0/d0/d84/tutorial_js_usage.html).
+The earlier obstacle checkboxes and the manual measuring tool are gone: the detector covers the first, and the second duplicated the automatic measurement.
+
+**Finish** leads to "What happens next": Base's team reviews the photos, checks the panel, then contacts the homeowner. Below that is **What we'll send to Base**: meter number, space, main breaker amps, breaker location, solar and fence, with anything missing in red, plus the notes for reviewers:
+- the space summary;
+- photos sent without passing a check;
+- samples;
+- the customer's note.
+
+It's all built by one pure function (`src/lib/report.ts`). **Download summary** saves `base-photo-check.json` with the findings and every photo (JPEG, ≤1600 px). That's what a technician view would read. It's a demo, so nothing is sent.
 
 ## Assets and attribution
 
@@ -252,7 +257,7 @@ Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-
 - `src/components/PhotoChecklist.tsx` + `src/lib/checklist.ts`: the grouped, dynamic checklist and the phone section bar.
 - `src/components/CheckedCapture.tsx` + `src/lib/panel/`: breaker box, rating, around-the-corner and fence checks; `scripts/eval-panel.ts` checks the amp reader.
 - `src/components/OptionalEstimate.tsx`: separate gated manual point-selection workflow.
-- `src/components/Review.tsx`: evidence review, observations, and result states.
+- `src/components/Review.tsx` + `src/lib/report.ts`: grouped review, the two follow-up questions, and the finish screen / downloadable summary for Base.
 - `src/lib/useCamera.ts` + `src/lib/lens.ts`: camera lifecycle, cancellation and the 0.5× lens toggle.
 - `src/lib/photos.ts`: checklist, completion, and local quality heuristics.
 - `src/lib/estimate.ts`: conservative geometry validation, runtime loading, and OpenCV memory cleanup.
