@@ -123,13 +123,16 @@ export function CaseDetail() {
           <span className="hidden md:inline text-sm text-gray-500">Pack: {rec.pack}</span>
           <span className={`text-xs md:text-sm rounded px-2 py-0.5 ${statusChip}`}>{rec.status.replace('_', ' ')}</span>
           {rec.degraded ? <span className="text-xs md:text-sm rounded bg-yellow-100 text-yellow-800 px-2 py-0.5">degraded</span> : null}
-          <button
-            className="ml-auto rounded bg-blue-600 text-white px-4 py-2 text-sm md:text-base disabled:opacity-50"
-            onClick={replan}
-            disabled={planning || rec.status === 'UNKNOWN'}
-          >
-            {planning ? 'Replanning…' : 'Replan'}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              className="rounded bg-blue-600 text-white px-4 py-3 text-sm md:text-base disabled:opacity-50"
+              onClick={replan}
+              disabled={planning || rec.status === 'UNKNOWN'}
+              aria-label="Replan"
+            >
+              {planning ? 'Replanning…' : 'Replan'}
+            </button>
+          </div>
         </div>
       </div>
 
