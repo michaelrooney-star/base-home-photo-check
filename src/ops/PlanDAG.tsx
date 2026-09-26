@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { ReactElement } from 'react';
 import { CheckCircle, Loader2, Clock, AlertTriangle, AlertOctagon, HelpCircle } from 'lucide-react';
 
@@ -17,6 +17,7 @@ export type PlanNodeVM = {
 export type PlanDAGProps = {
   nodes: PlanNodeVM[];
   onSelectNode: (id: string) => void;
+  selectedNodeId?: string | null;
 };
 
 type Layout = {
@@ -98,10 +99,50 @@ function edgeColor(fromId: string, toId: string): string {
   return cp(fromId) && cp(toId) ? '#6D28D9' /* violet-700 */ : '#334155' /* slate-700 */;
 }
 
-export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
+export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [w, isMobile] = useViewport(containerRef);
   const layout = useLayout(nodes, w, isMobile);
+  const sizesRef = useRef<Record<string, { w: number; h: number }>>({});
+  const [, force] = (React as any).useState ? (React as any).useState(0) : [0, (_: any) => {}];
+
+  // Measure chip sizes after paint to align ports accurately
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const nodeEls = el.querySelectorAll<HTMLElement>('[data-node-id]');
+    let changed = false;
+    nodeEls.forEach((n) => {
+      const id = n.dataset.nodeId!;
+      const rect = n.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height);
+      const prev = sizesRef.current[id];
+      if (!prev || prev.w !== w || prev.h !== h) {
+        sizesRef.current[id] = { w, h };
+        changed = true;
+      }
+    });
+    if (changed) force((x: number) => x + 1);
+    // Re-measure on resize
+    const ro = new ResizeObserver(() => {
+      let changed2 = false;
+      nodeEls.forEach((n) => {
+        const id = n.dataset.nodeId!;
+        const rect = n.getBoundingClientRect();
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        const prev = sizesRef.current[id];
+        if (!prev || prev.w !== w || prev.h !== h) {
+          sizesRef.current[id] = { w, h };
+          changed2 = true;
+        }
+      });
+      if (changed2) force((x: number) => x + 1);
+    });
+    nodeEls.forEach((n) => ro.observe(n));
+    return () => ro.disconnect();
+  }, [nodes, layout.width, layout.height]);
 
   return (
     <div>
@@ -125,12 +166,12 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
           {isMobile ? (
             // Mobile: draw simple vertical trunks between wave groups
             <>
-              {drawMobileTrunk(nodes, layout)}
+              {drawMobileTrunk(nodes, layout, (id) => sizesRef.current[id] ?? { w: layout.nodeW, h: layout.nodeH })}
             </>
           ) : (
             // Desktop: orthogonal bus fan-out/fan-in, per-edge with arrowheads
             <>
-              {drawDesktopBusPaths(nodes, layout)}
+              {drawDesktopBusPaths(nodes, layout, (id) => sizesRef.current[id] ?? { w: layout.nodeW, h: layout.nodeH })}
             </>
           )}
           {/* Wave labels in SVG to share coordinates */}
@@ -156,7 +197,7 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
         </svg>
 
       {/* Absolutely positioned HTML nodes using the same layout map */}
-        {nodes.map((n) => {
+      {nodes.map((n) => {
           const p = layout.pos[n.id];
           const colors = nodeColor(n);
           const visual = nodeVisual(n);
@@ -165,18 +206,22 @@ export function PlanDAG({ nodes, onSelectNode }: PlanDAGProps) {
             <button
               key={n.id}
               onClick={() => onSelectNode(n.id)}
-            className="absolute text-left rounded border px-2 py-2 focus:outline-none"
+            className={
+              "absolute text-left rounded-full border px-3 py-1 focus:outline-none shadow-sm " +
+              (selectedNodeId === n.id ? "ring-2 ring-blue-500" : "")
+            }
               style={{
                 background: colors.bg,
                 borderColor: colors.border,
                 left: p.x,
                 top: p.y,
-                width: layout.nodeW,
-              minHeight: Math.max(layout.nodeH, 44), // keep desktop hit target ≥44
+              // Chips auto-width; maintain min hit area
+              minHeight: isMobile ? 44 : 36,
               }}
               aria-label={`${n.worker} ${visual.label}`}
+            data-node-id={n.id}
             >
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
                 <Icon size={16} className={visual.colorClass + (visual.spin ? ' animate-spin' : '')} />
                 <div className="font-medium capitalize truncate">{n.worker.replace('_', ' ')}</div>
@@ -281,7 +326,11 @@ function shortStatus(n: PlanNodeVM): string {
 }
 
 // Helpers: desktop bus layout
-function drawDesktopBusPaths(nodes: PlanNodeVM[], layout: ReturnType<typeof useLayout>): ReactElement[] {
+function drawDesktopBusPaths(
+  nodes: PlanNodeVM[],
+  layout: ReturnType<typeof useLayout>,
+  sizeOf: (id: string) => { w: number; h: number }
+): ReactElement[] {
   const wave0 = nodes.filter((n) => n.wave === 0);
   const wave1 = nodes.filter((n) => n.wave === 1);
   const wave2 = nodes.filter((n) => n.wave === 2);
@@ -290,12 +339,14 @@ function drawDesktopBusPaths(nodes: PlanNodeVM[], layout: ReturnType<typeof useL
   const t = wave2.find((n) => n.worker === 'reconcile') ?? wave2[0];
   if (s && wave1.length > 0) {
     const sp = layout.pos[s.id];
-    const sx = sp.x + layout.nodeW;
-    const sy = sp.y + layout.nodeH / 2;
+    const ssz = sizeOf(s.id);
+    const sx = sp.x + ssz.w;
+    const sy = sp.y + ssz.h / 2;
     const busX = (layout.colX[0] ?? sp.x) + layout.nodeW + 24;
     for (const child of wave1) {
       const cp = layout.pos[child.id];
-      const cy = cp.y + layout.nodeH / 2;
+      const csz = sizeOf(child.id);
+      const cy = cp.y + csz.h / 2;
       const color = edgeColor(s.id, child.id);
       const width = cpEdge(s.id, child.id) ? 4 : 2.5;
       const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
@@ -305,13 +356,15 @@ function drawDesktopBusPaths(nodes: PlanNodeVM[], layout: ReturnType<typeof useL
   }
   if (t && wave1.length > 0) {
     const tp = layout.pos[t.id];
+    const tsz = sizeOf(t.id);
     const tx = tp.x;
-    const ty = tp.y + layout.nodeH / 2;
+    const ty = tp.y + tsz.h / 2;
     const busX = (layout.colX[2] ?? tp.x) - 24;
     for (const child of wave1) {
       const cp = layout.pos[child.id];
-      const sx = cp.x + layout.nodeW;
-      const sy = cp.y + layout.nodeH / 2;
+      const csz = sizeOf(child.id);
+      const sx = cp.x + csz.w;
+      const sy = cp.y + csz.h / 2;
       const color = edgeColor(child.id, t.id);
       const width = cpEdge(child.id, t.id) ? 4 : 2.5;
       const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
@@ -323,15 +376,19 @@ function drawDesktopBusPaths(nodes: PlanNodeVM[], layout: ReturnType<typeof useL
 }
 
 // Helpers: mobile vertical trunks between waves (no per-sibling edges)
-function drawMobileTrunk(nodes: PlanNodeVM[], layout: ReturnType<typeof useLayout>): ReactElement[] {
+function drawMobileTrunk(
+  nodes: PlanNodeVM[],
+  layout: ReturnType<typeof useLayout>,
+  sizeOf: (id: string) => { w: number; h: number }
+): ReactElement[] {
   const out: ReactElement[] = [];
   // Compute group bounding boxes
   const group = (wave: 0 | 1 | 2) => {
     const list = nodes.filter((n) => n.wave === wave);
     if (list.length === 0) return null;
     const top = Math.min(...list.map((n) => layout.pos[n.id].y));
-    const bottom = Math.max(...list.map((n) => layout.pos[n.id].y + layout.nodeH));
-    const cx = (layout.pos[list[0].id].x ?? 12) + layout.nodeW / 2;
+    const bottom = Math.max(...list.map((n) => layout.pos[n.id].y + sizeOf(n.id).h));
+    const cx = (layout.pos[list[0].id].x ?? 12) + sizeOf(list[0].id).w / 2;
     return { top, bottom, cx };
   };
   const g0 = group(0);

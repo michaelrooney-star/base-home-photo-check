@@ -138,7 +138,7 @@ export function CaseDetail() {
 
       {/* Primary: DAG */}
       <div>
-        <PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} />
+        <PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} />
       </div>
 
       {/* Secondary: compact list for a11y (collapsed by default) */}
