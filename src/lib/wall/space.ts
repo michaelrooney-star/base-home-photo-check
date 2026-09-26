@@ -10,7 +10,8 @@ import type { Detection, ObjectKind } from './objects.ts';
 export type Side = 'left' | 'right';
 export type BlockerKind = ObjectKind | 'plants';
 /** A stretch of wall (shares of photo width) the battery can't go in front of. */
-export type Blocker = { kind: BlockerKind; name: string; x0: number; x1: number };
+/** x0/x1: the stretch of wall it blocks. y0/y1: where it is in the photo, for highlighting (shares of width/height). */
+export type Blocker = { kind: BlockerKind; name: string; x0: number; x1: number; y0: number; y1: number };
 export type Stretch = { side: Side; x0: number; x1: number; ft: number | null; gapFt: number | null; open: boolean };
 export type SpaceFinding = {
   /** Feet can be measured (meter cover size known). On angled side photos feet are a lower bound: far wall looks smaller. */
@@ -29,7 +30,7 @@ export const SPACE = {
   batteryFt: 3,
   maxFromMeterFt: 20,
   /** Share of plant-coloured pixels in a column, at meter height, above which the column counts as blocked by plants. */
-  plantColumn: 0.4,
+  plantColumn: 0.3,
   /** Detections bigger than this share of the photo are usually the whole scene, not an object. */
   maxObjectArea: 0.5,
   /** A box wider than this (feet) is called a cabinet. */
@@ -46,12 +47,13 @@ export function greenProfile(rgba: ArrayLike<number>, width: number, height: num
     let g = 0, n = 0;
     for (let y = r0; y < r1; y += 2) for (let x = x0; x < x1; x += 2) {
       const i = (y * width + x) * 4, R = rgba[i], G = rgba[i + 1], B = rgba[i + 2];
-      if (G > 50 && G > R * 1.08 && G > B * 1.15) g++;
+      if (G > 40 && G > R * 1.02 && G > B * 1.08) g++; // loose: shaded leaves are only faintly green
       n++;
     }
     out.push(n ? g / n : 0);
   }
-  return out;
+  // Smooth over 5 columns: a bush is patchy (gaps, shadows, dry leaves) but reads as one mass.
+  return out.map((_, i) => { const w = out.slice(Math.max(0, i - 2), i + 3); return w.reduce((a, b) => a + b, 0) / w.length; });
 }
 
 /** Rows (shares of height) where tall plants would block the wall: around meter height, not the lawn in front. */
@@ -90,7 +92,7 @@ export function findSpace(e: { meter: MeterSpot; detections: Detection[]; green:
   // The meter's own enclosure: a detection around the meter centre, else a span from the cover size.
   const own = enclosureOf(m, e.detections);
   const half = m.r ? (1.6 * m.r * H) / W : 0.04;
-  const meterSpan: Blocker = { kind: 'meter', name: NAME.meter, x0: Math.min(own?.x0 ?? 1, m.x - half), x1: Math.max(own?.x1 ?? 0, m.x + half) };
+  const meterSpan: Blocker = { kind: 'meter', name: NAME.meter, x0: Math.min(own?.x0 ?? 1, m.x - half), x1: Math.max(own?.x1 ?? 0, m.x + half), y0: own?.y0 ?? m.y - 0.05, y1: own?.y1 ?? m.y + 0.05 };
 
   const blockers: Blocker[] = [meterSpan];
   for (const d of e.detections) {
@@ -99,15 +101,16 @@ export function findSpace(e: { meter: MeterSpot; detections: Detection[]; green:
     if (d.y1 < m.y) continue; // mounted above the meter: out of the battery's way
     const wFt = ft(d.x1 - d.x0);
     const name = d.kind === 'box' && wFt != null && wFt >= SPACE.cabinetFt ? 'large cabinet' : d.kind === 'meter' ? 'electrical box' : NAME[d.kind];
-    blockers.push({ kind: d.kind === 'meter' ? 'box' : d.kind, name, x0: d.x0, x1: d.x1 });
+    blockers.push({ kind: d.kind === 'meter' ? 'box' : d.kind, name, x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 });
   }
   // Tall plants: runs of plant-coloured columns.
   const cols = e.green.length;
   for (let c = 0; c < cols; ) {
     if (e.green[c] < SPACE.plantColumn) { c++; continue; }
-    let d = c; // a run of plant columns, bridging single-column gaps
-    while (d < cols && (e.green[d] >= SPACE.plantColumn || (d + 1 < cols && e.green[d + 1] >= SPACE.plantColumn))) d++;
-    blockers.push({ kind: 'plants', name: NAME.plants, x0: c / cols, x1: d / cols });
+    let d = c; // a run of plant columns, bridging gaps of up to 3 columns (a bush has holes)
+    while (d < cols && [0, 1, 2, 3].some(k => d + k < cols && e.green[d + k] >= SPACE.plantColumn)) d++;
+    while (d > c && e.green[d - 1] < SPACE.plantColumn) d--; // don't end the run on a gap
+    blockers.push({ kind: 'plants', name: NAME.plants, x0: c / cols, x1: d / cols, y0: plantBand(m)[0], y1: 1 });
     c = d;
   }
 

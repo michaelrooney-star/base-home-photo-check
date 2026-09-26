@@ -149,7 +149,7 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 **Telling the customer what we're looking for.** Before each wall photo, a short card lists what the photo needs to show: the meter, the wall on both sides or along one side, the ground in front of the wall, and 3 ft of open wall with nothing mounted on it. It also gives the tips: step back, phone sideways, 0.5× lens. The result card shows the same list, each item found or not found with a short reason, followed by a highlighted box:
 - **How to fix it** when the photo isn't accepted;
 - **Can you show more of the wall?** when the photo is accepted but open wall hasn't been found yet. Here "Retake to show more wall" is the main button and "Use this photo" is secondary.
-The photo is marked up too: open wall in green, what's in the way in orange, and a dashed "Ground not in the photo" line when needed. The full list of technical checks sits behind "All photo checks".
+The photo is marked up too: each detected object (electrical box, cabinet, AC unit, plants) is outlined where it is, the open stretch of wall is shaded green with its width, and a dashed "Ground not in the photo" line appears when needed. The full list of technical checks sits behind "All photo checks".
 
 **On a phone.** While photos are being taken, the site header, journey bar, footer and checklist sidebar are hidden, so the camera sits near the top of the screen. Held sideways, as the wall photos ask, the camera fills the screen height and the instructions and result sit in a column beside it. The result card is kept short, for someone holding a phone with their hands full:
 - a verdict ("Retake needed" / "Photo accepted" / "Accepted — can you show more wall?");
@@ -265,3 +265,21 @@ Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-
 ## Validation and limits
 
 `npm run build` checks all TypeScript and bundles the app. `npm test` checks conditional checklist completion, missing/retake evidence, observation requirements, rejection of invalid geometry, and synthetic known distances through the actual OpenCV runtime. Synthetic test dimensions are mathematical fixtures, not dimensions assigned to a real meter. Browser walkthroughs cover samples, review/retake, safe skip, measurement gating, local file selection, and narrow-screen layout. Physical rear-camera hardware and individual mobile browsers require real-device testing.
+
+## Hand-held steadiness
+
+Tuned after a test on iPhones at a real meter, where "Hold steady" never cleared. Measured on a real meter close-up:
+
+| Hand movement between frames | Old measure (limit 6) | New measure (limit 14) |
+| --- | --- | --- |
+| 1 px | 6.4 | 3.6 |
+| 2 px | 13.0 | 8.6 |
+| 3 px | 18.2 | 13.7 |
+| 5 px | 24.1 | 20.1 |
+
+- **Motion** is measured on 4× shrunk frames (`metrics.motion`), and the limit is 14 on every step. Tremor of up to about 3 px per frame (⅛ s) passes: that's under half a pixel of blur in a 1/60 s exposure. Walking or swinging the phone still fails.
+- **Steadiness window:** 4 good frames out of the last 6 (about ¾ s) instead of 6 in a row, so one shaky or refocusing frame doesn't restart the count.
+- **Focus:** each frame must be at least 50 % as sharp as the recent best (was 60 %).
+- **"Hold steady" only means movement.** While the number is being read, the banner says "Reading the meter number…".
+- **Auto-capture doesn't wait for meter recognition** (about 150 MB, which can be slow or fail on an iPhone). The saved photo waits at most 8 s for it. If recognition still isn't available, a photo with a readable meter number is accepted and marked "not checked" for reviewers; before, it was rejected.
+- **After 5 s,** "Or tap the button to take the photo yourself." appears above the shutter.

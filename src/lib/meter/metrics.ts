@@ -5,11 +5,34 @@ import { glare, meanLuma, sharpness, stretch, type Gray } from './image.ts';
 export type FastMetrics = { luma: number; sharpness: number; relSharpness: number; glare: number; motion: number };
 export const FAST_SIZE = 256;
 
-/** Mean absolute difference between two same-sized frames (0–255): camera shake or a moving subject. */
+/** Box-averages a frame down by `f` (e.g. 256 px → 64 px). Averaging blurs away the pixel-level jitter of a hand-held phone. */
+export function shrink(g: Gray, f = 4): Gray {
+  const W = Math.floor(g.width / f), H = Math.floor(g.height / f), out = new Uint8ClampedArray(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0; for (let dy = 0; dy < f; dy++) for (let dx = 0; dx < f; dx++) s += g.data[(y * f + dy) * g.width + x * f + dx];
+    out[y * W + x] = s / (f * f);
+  }
+  return { data: out, width: W, height: H };
+}
+
+/**
+ * Mean absolute difference (0–255) between two frames, measured on 4×-shrunk copies: real movement (walking, swinging
+ * the phone) still shows, but the 1–2 px tremor of a hand-held phone on fine print mostly averages out.
+ */
 export function motion(a: Gray, b?: Gray | null) {
   if (!b || b.width !== a.width || b.height !== a.height) return 0;
-  let s = 0; for (let i = 0; i < a.data.length; i += 3) s += Math.abs(a.data[i] - b.data[i]);
-  return s / Math.ceil(a.data.length / 3);
+  const sa = shrink(a), sb = shrink(b);
+  let s = 0; for (let i = 0; i < sa.data.length; i++) s += Math.abs(sa.data[i] - sb.data[i]);
+  return s / sa.data.length;
+}
+
+/**
+ * "Steady enough": counts good frames among the last `size`. Unlike a run of consecutive frames, one shaky or
+ * refocusing frame doesn't send a hand-held user back to zero.
+ */
+export function createSteadyWindow(size = 6) {
+  const recent: boolean[] = [];
+  return (good: boolean) => { recent.push(good); if (recent.length > size) recent.shift(); return recent.filter(Boolean).length; };
 }
 
 export function fastMetrics(g: Gray, prev?: Gray | null): FastMetrics {

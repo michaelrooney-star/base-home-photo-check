@@ -3,7 +3,7 @@ import { Check, CircleAlert, CircleCheck, ImagePlus, Info, Loader2, MapPin, Rota
 import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, prewarmDetector, type ModelState } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
-import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
+import { createFocusTracker, createSteadyWindow, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
 import { guideWall, spaceLimitedOnly, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
 import { shortFix, WALL_CRITERIA, WALL_MESSAGES, WALL_SEQUENCE, type SceneClass, type WallMode } from '../lib/wall/criteria';
 import { analyzeWallPhoto, decide, measureSpace, spotFromTap, withRuler, type WallAnalysis } from '../lib/wall/locate';
@@ -104,14 +104,14 @@ export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnow
     if (phase !== 'live' || !camera.stream || !videoReady) return;
     const id = run.current; let alive = true;
     live.current = { fast: null, goodFrames: 0, landscape: true, scene: null, prev: null };
-    const focus = createFocusTracker();
+    const focus = createFocusTracker(), steady = createSteadyWindow(WALL_CRITERIA.readyWindow);
     const tick = setInterval(() => {
       const v = video.current; if (!v || !v.videoWidth) return;
       const small = gray(grab(v, { x: 0, y: 0, w: v.videoWidth, h: v.videoHeight }, FAST_SIZE));
       const m = fastMetrics(small, live.current.prev);
       m.relSharpness = focus(performance.now(), m.sharpness);
       live.current.prev = small; live.current.fast = m; live.current.landscape = v.videoWidth >= v.videoHeight;
-      live.current.goodFrames = m.luma >= WALL_CRITERIA.minLuma && wallInFocus(m) && m.motion <= WALL_CRITERIA.maxMotion ? live.current.goodFrames + 1 : 0;
+      live.current.goodFrames = steady(m.luma >= WALL_CRITERIA.minLuma && wallInFocus(m) && m.motion <= WALL_CRITERIA.maxMotion);
       const g = guideWall({ ...live.current, mode, now: performance.now() });
       setGuidance(prev => (prev && prev.message === g.message && prev.tone === g.tone && JSON.stringify(prev.checks) === JSON.stringify(g.checks) ? prev : g));
       if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), relSharp: m.relSharpness.toFixed(2), motion: m.motion.toFixed(1) }));
@@ -191,9 +191,11 @@ export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnow
         {phase === 'tap' && ring({ ...cursor, r: null }, 'cursor')}
         {phase === 'result' && ring(spot, d?.accepted ? 'good' : 'placed')}
         {phase === 'result' && photoRect && d?.checks.some(c => c.id === 'ground' && c.state === 'fail') && <div className="ground-missing" aria-hidden="true" style={{ left: photoRect.x, width: photoRect.w, top: photoRect.y + photoRect.h - 64 }}><span>↓ Ground not in the photo</span></div>}
-        {phase === 'result' && space && spot && photoRect && <div className="space-strip" aria-hidden="true" style={{ left: photoRect.x, width: photoRect.w, top: photoRect.y + photoRect.h - 30 }}>
-          {space.blockers.filter(b => b.kind !== 'meter' && space.sides.includes(b.x1 <= spot!.x ? 'left' : 'right')).map((b, i) => <span key={i} className="space-block" style={{ left: `${b.x0 * 100}%`, width: `${(b.x1 - b.x0) * 100}%` }}>{(b.x1 - b.x0) * photoRect.w >= b.name.length * 7 + 12 && <em>{b.name}</em>}</span>)}
-          {space.spot && <span className="space-open" style={{ left: `${space.spot.x0 * 100}%`, width: `${(space.spot.x1 - space.spot.x0) * 100}%` }}><em>open wall</em></span>}
+        {phase === 'result' && space && spot && photoRect && <div className="space-marks" aria-hidden="true" style={{ left: photoRect.x, top: photoRect.y, width: photoRect.w, height: photoRect.h }}>
+          {/* What's in the way, outlined where it is in the photo; the open stretch of wall, shaded green from meter height down. */}
+          {space.blockers.filter(b => b.kind !== 'meter' && space.sides.includes(b.x1 <= spot!.x ? 'left' : 'right')).map((b, i) =>
+            <span key={i} className={`space-object ${b.kind} ${b.y0 < 0.06 ? 'label-inside' : ''} ${b.x0 > 0.8 ? 'label-right' : ''}`} style={{ left: `${b.x0 * 100}%`, top: `${b.y0 * 100}%`, width: `${(b.x1 - b.x0) * 100}%`, height: `${(b.y1 - b.y0) * 100}%` }}><em>{b.name}</em></span>)}
+          {space.spot && <span className="space-open" style={{ left: `${space.spot.x0 * 100}%`, top: `${spot.y * 100}%`, width: `${(space.spot.x1 - space.spot.x0) * 100}%`, bottom: 0 }}><em>Open wall{space.spot.ft ? ` · about ${Math.round(space.spot.ft)}${space.spot.open ? '+' : ''} ft` : ''}</em></span>}
         </div>}
       </> : camera.stream ? <>
         <video ref={video} autoPlay playsInline muted onLoadedData={() => setVideoReady(true)} aria-label="Live camera preview" />

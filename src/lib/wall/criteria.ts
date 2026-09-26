@@ -61,11 +61,12 @@ export const WALL_CRITERIA = {
   /** Laplacian variance of the contrast-stretched photo (≤1200px). Wide shots have no small text, so this is lenient. */
   minSharpness: 15,
   /** Live preview: consecutive steady, sharp, well-lit frames before we say "take the photo". */
-  readyFrames: 6,
+  readyFrames: 4,
+  readyWindow: 6,
   /** Live focus: relative to the sharpest recent frame, with a low absolute floor (see the meter criteria). */
-  minRelativeSharpness: 0.6,
+  minRelativeSharpness: 0.5,
   minLiveSharpness: 150,
-  maxMotion: 6,
+  maxMotion: 14,
   freshMs: 3000,
   rejectionsBeforeOverride: 2,
 };

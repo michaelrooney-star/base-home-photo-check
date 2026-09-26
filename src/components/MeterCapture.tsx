@@ -5,7 +5,7 @@ import { CRITERIA, MESSAGES } from '../lib/meter/criteria';
 import { onModelStatus, prewarmAnalyzer, type ModelState } from '../lib/meter/analyzer';
 import { analyzeStill, coverRegion, grab, gray, readRegion, type Region, type StillAnalysis } from '../lib/meter/frames';
 import { frameIsGood, guide, type Guidance, type LiveInput } from '../lib/meter/guidance';
-import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
+import { createFocusTracker, createSteadyWindow, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
 import type { Gray } from '../lib/meter/image';
 import type { useCamera } from '../lib/useCamera';
 import type { Photo } from '../lib/photos';
@@ -20,6 +20,7 @@ export function MeterCapture({ camera, onAccept }: Props) {
   const [still, setStill] = useState<Still | null>(null);
   const [analysis, setAnalysis] = useState<StillAnalysis | null>(null);
   const [rejections, setRejections] = useState(0);
+  const [tapHint, setTapHint] = useState(false);
   const [guidance, setGuidance] = useState<Guidance | null>(null);
   const [error, setError] = useState('');
   const [videoReady, setVideoReady] = useState(false);
@@ -92,14 +93,16 @@ export function MeterCapture({ camera, onAccept }: Props) {
     live.current = { fast: null, goodFrames: 0, subject: null, reading: null, prev: null, lastNumber: null };
     stableNumber.current = null;
     let iteration = 0;
-    const focus = createFocusTracker();
+    const focus = createFocusTracker(), steady = createSteadyWindow(CRITERIA.readyWindow);
+    setTapHint(false);
+    const hintTimer = setTimeout(() => setTapHint(true), 5000);
     const tick = setInterval(() => {
       const v = video.current, region = regionNow(); if (!v || !region) return;
       const small = gray(grab(v, region, FAST_SIZE));
       const m = fastMetrics(small, live.current.prev);
       m.relSharpness = focus(performance.now(), m.sharpness);
       live.current.prev = small; live.current.fast = m;
-      live.current.goodFrames = frameIsGood(m) ? live.current.goodFrames + 1 : 0;
+      live.current.goodFrames = steady(frameIsGood(m));
       const g = guide({ ...live.current, now: performance.now() });
       // Debounce: a new instruction must hold for 600 ms before it replaces the current one (except "ready").
       const now = performance.now(), sh = shown.current;
@@ -135,14 +138,15 @@ export function MeterCapture({ camera, onAccept }: Props) {
         await sleep(150);
       }
     })();
-    return () => { alive = false; clearInterval(tick); };
+    return () => { alive = false; clearInterval(tick); clearTimeout(hintTimer); };
   }, [phase, camera.stream, videoReady, regionNow, capture]);
 
   function retake() { run.current++; setAnalysis(null); setOwnedStill(null); setGuidance(null); shown.current = { message: '', since: 0, candidate: '' }; setPhase('live'); }
   function use(override = false) {
     if (!still || !analysis) return;
     const d = analysis.decision; const s = still; stillRef.current = null; setStill(null); // ownership of the blob URL moves to the saved photo
-    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: d.accepted, meterNumber: d.meterNumber, reasons: d.reasons, override } });
+    const unchecked = d.checks.some(c => c.id === 'subject' && c.state === 'skipped');
+    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: d.accepted, meterNumber: d.meterNumber, reasons: d.reasons, override, ...(unchecked ? { details: 'Meter recognition wasn’t available on this phone; the meter number was read on device.' } : {}) } });
   }
 
   const tone = guidance?.tone ?? 'search';
@@ -157,6 +161,7 @@ export function MeterCapture({ camera, onAccept }: Props) {
             <div className={`guide-hole ${tone}`} aria-hidden="true" style={{ left: circle.cx - circle.r, top: circle.cy - circle.r, width: circle.r * 2, height: circle.r * 2 }} />
           </>}
           <div className={`guide-message ${tone}`} role="status" aria-live="polite">{tone === 'ready' ? <CircleCheck size={17} /> : tone === 'hold' ? <Loader2 size={17} className="spin" /> : null}{guidance?.message ?? MESSAGES.loading}</div>
+          {tapHint && tone !== 'ready' && <div className="tap-hint">{MESSAGES.tapHint}</div>}
           <button className="shutter" aria-label="Take photo now" disabled={!videoReady || phase !== 'live'} onClick={capture}><span /></button>
         </> : <div className="camera-empty"><h3>{camera.status === 'requesting' ? 'Allow your camera to get started' : 'Turn on your camera'}</h3><p>{camera.status === 'unavailable' ? 'Your camera isn’t available. You can upload a photo instead.' : 'We’ll guide you to a photo Base can use.'}</p><button className="button" onClick={() => void camera.start()} disabled={camera.status === 'requesting'}>Use camera</button></div>}
       {phase === 'checking' && <div className="checking-overlay"><Loader2 size={22} className="spin" /> {models.subject === 'loading' ? 'Loading meter recognition, then checking your photo…' : 'Checking your photo…'}</div>}

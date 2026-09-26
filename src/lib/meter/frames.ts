@@ -52,7 +52,7 @@ export type StillAnalysis = { decision: Decision; subject: SubjectResult; debug:
 export async function analyzeStill(url: string, region?: Region, liveNumber?: string | null): Promise<StillAnalysis> {
   const img = new Image(); img.src = url; await img.decode();
   const r = region ?? { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
-  await waitForSubject(90_000); // first run: the classifier may still be downloading
+  await waitForSubject(8_000); // first run: give the classifier a moment, but don't hold the customer up
   const rr = await readRegion(img, r, { subject: true });
   let reading = rr.reading;
   const digits = (s?: string | null) => (s ?? '').replace(/\D/g, '');
