@@ -1,4 +1,4 @@
-import { ArrowRight, LayoutList, Settings2 } from 'lucide-react';
+import { ArrowRight, BookOpen, LayoutList, Settings2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
@@ -29,13 +29,14 @@ function navItems(userId: string) {
   return [
     { href: `/ops/${userId}`, label: 'Queue', icon: LayoutList },
     { href: '/admin', label: 'Admin', icon: Settings2 },
+    { href: '/admin/knowledge', label: 'Knowledge', icon: BookOpen },
   ];
 }
 
 export function ConsoleShell({ children, userId = 'ops_maya' }: ConsoleShellProps) {
   const location = useLocation();
   const items = navItems(userId);
-  const active = (href: string) => href === '/admin' ? location.pathname.startsWith('/admin') : location.pathname.startsWith('/ops');
+  const active = (href: string) => href === '/admin' ? location.pathname === '/admin' : href === '/admin/knowledge' ? location.pathname.startsWith('/admin/knowledge') : location.pathname.startsWith('/ops');
 
   return (
     <div className="console-shell">
