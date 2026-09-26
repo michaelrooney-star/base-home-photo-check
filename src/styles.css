@@ -50,10 +50,18 @@
 .wall-guide i{position:absolute;width:34px;height:34px;border:0 solid #fff}
 .wall-guide i:nth-child(1){top:0;left:0;border-left-width:3px;border-top-width:3px}.wall-guide i:nth-child(2){top:0;right:0;border-right-width:3px;border-top-width:3px}
 .wall-guide i:nth-child(3){bottom:0;right:0;border-right-width:3px;border-bottom-width:3px}.wall-guide i:nth-child(4){bottom:0;left:0;border-left-width:3px;border-bottom-width:3px}
-.wall-guide span{position:absolute;left:0;right:0;bottom:-2px;border-top:2px dashed #ffffffb0;text-align:center;color:#fff;font-size:12px;padding-top:4px;text-shadow:0 1px 4px #000}
+.wall-guide span{position:absolute;left:0;right:0;bottom:-2px;border-top:2px dashed #ffffffb0;text-align:left;padding-left:44px;color:#fff;font-size:12px;padding-top:4px;text-shadow:0 1px 4px #000}
 .meter-pin{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;z-index:2;border:3px solid #f2b441;box-shadow:0 0 0 2px #0006,inset 0 0 0 2px #0006}
 .meter-pin.proposed{animation:pulse 1.4s ease-in-out infinite}.meter-pin.good{border-color:#6ccf5a}.meter-pin.cursor{border-style:dashed;border-color:#fff}
 @keyframes pulse{50%{transform:translate(-50%,-50%) scale(1.15)}}
 .wall-question{margin-top:18px;padding:16px 18px;border-radius:8px;background:#f3f5ec;border:1px solid #dde3d2}
 .wall-question h3{font-size:17px;font-weight:600}.wall-question p{font-size:14px;line-height:1.55;color:#646b5c;margin-top:5px}
 @media(max-width:760px){.wall-frame{aspect-ratio:4/3;min-height:240px}}
+.wall-steps{list-style:none;display:flex;gap:6px;flex-wrap:wrap;padding:0;margin:0 0 12px}
+.wall-steps li{display:flex;align-items:center;gap:7px;font-size:12px;color:#858c79;padding:5px 10px 5px 5px;border-radius:14px;background:#eceee5}
+.wall-steps b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#fff;font-size:11px;font-weight:600}
+.wall-steps li.current{background:#2f3a2b;color:#fff}.wall-steps li.current b{background:var(--red);color:#fff}
+.wall-steps li.done{background:#e1ebd7;color:#4f6a3f}.wall-steps li.done b{background:#5c8a45;color:#fff}
+.meter-zone{position:absolute;top:8%;bottom:10%;width:30%;z-index:1;pointer-events:none;border:2px dashed #ffffffa0;border-radius:8px;display:flex;align-items:flex-start;justify-content:center}
+.meter-zone.right{left:3%}.meter-zone.left{right:3%}
+.meter-zone span{margin-top:44%;color:#fff;font-size:12px;background:#1f261fb0;padding:3px 8px;border-radius:10px}

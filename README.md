@@ -29,7 +29,7 @@ A phone camera requires a secure context (HTTPS, or localhost on the phone itsel
 
 1. Tap **Start**. This is the first point at which camera access is requested.
 2. **Meter number:** fit the meter inside the circle and follow the on-screen instruction. The app takes the photo automatically once it can read the meter number, then accepts or rejects it with a reason (see [Meter photo check](#meter-photo-check)). Upload and **Try sample photo** go through the same check.
-3. **Whole meter wall:** follow the live instruction (phone sideways, step back, hold steady) and take the photo. The app finds the meter, asks "Is this your electric meter?" (or asks you to tap it), then accepts or rejects the photo (see [Whole meter wall check](#whole-meter-wall-check)).
+3. **Meter wall photos (whole wall, then right of the meter, then left):** one after another with a progress strip. For each, follow the live instruction (phone sideways, step back, hold steady) and take the photo. The app finds the meter, asks "Is this your electric meter?" (or asks you to tap it), then accepts or rejects the photo (see [Whole meter wall check](#whole-meter-wall-check)).
 4. Other photos: capture one still photo at a time, choose a local image, or select **Use sample photo**. No video is recorded. Confirm readability manually; retake any uncertain image.
 5. Answer the fence question. “Yes” adds the behind-fence photo; “no” removes it; “not sure” leaves the final summary incomplete until resolved. Select the breaker location, including “not sure” if needed.
 6. The rating step includes a safe skip option. Skipping never creates a completed photo.
@@ -136,6 +136,13 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 | Phone held sideways | Landscape photo | "Turn your phone sideways…" |
 | Enough light / In focus | Brightness ≥ 45/255; sharpness ≥ 15 (lenient: wide shots have no small text) | "It's too dark…" / "The photo is blurry…" |
 
+**Right-side and left-side photos** use the same screen and pipeline, taken straight after the whole-wall photo, with a 1-2-3 progress strip. Base's samples look along the wall from about 10 steps back, with the meter near the edge of the frame. So:
+
+- the live view shows a dashed "Meter here" zone on the left (right-side photo) or right (left-side photo);
+- the photo is accepted when the meter is found or tapped within 40 % of that edge ("Shows the area to the right of the meter"), with the same distance, ground, orientation, light and focus checks;
+- a meter on the opposite side gets "This shows the area to the LEFT of your meter. Turn to face the area on its right side." A meter near the middle gets "Turn a little more to the right…";
+- no feet estimate is made, because the wall recedes at an angle.
+
 **Distance estimates** use the meter's glass cover (about 7 in across on US socket meters) as a ruler. For example: "About 6 ft of wall shows left of the meter and 7 ft to the right." That's roughly ±30 %, so it's shown as an estimate and saved with the photo for Base's reviewers, and only a very short side (< 3 ft) is rejected.
 
 **Testing:** `?scene=house_wall|meter_closeup|indoors|other|off` fakes the scene classifier; `?debug=1` shows candidates, scores and estimates. `src/lib/wall/circles.test.ts` checks the circle search against Base's guide photos in `eval/wall`.
@@ -185,7 +192,7 @@ Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-
 - `src/components/Welcome.tsx`: introduction and explicit start action.
 - `src/components/GuidedCapture.tsx`: camera, upload, samples, drafts, confirmation, safety, and conditional fence prompt.
 - `src/components/MeterCapture.tsx`: the meter step — live guidance overlay, auto-capture, accept/reject result.
-- `src/components/WallCapture.tsx`: the whole-meter-wall step — live guidance, meter confirm/tap, accept/reject result.
+- `src/components/WallCapture.tsx`: the three meter-wall steps (whole wall, right, left) — live guidance, meter confirm/tap, accept/reject result.
 - `src/lib/wall/`: `criteria.ts` (rules, prompts, copy), `assess.ts` (live instruction and decision), `circles.ts` (OpenCV meter-cover search), `locate.ts` (photo pipeline).
 - `src/lib/meter/`: meter photo check — `criteria.ts` (rules and copy), `guidance.ts` (live instruction), `acceptance.ts` (accept/reject), `number.ts` (pick the meter number from OCR lines), `image.ts` / `metrics.ts` (image measurements), `frames.ts` (camera/photo plumbing), `analyzer.ts` + `analyzer.worker.ts` + `clip.ts` (on-device models).
 - `scripts/eval-meter.ts`: runs the meter check in Node against labeled photos.

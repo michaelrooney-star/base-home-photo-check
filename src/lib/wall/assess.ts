@@ -1,7 +1,13 @@
 // Whole-meter-wall photo: live instruction and final accept/reject, from observations only. Pure; unit-tested.
 import type { ClassResult } from '../meter/analyzer.ts';
 import type { FastMetrics } from '../meter/metrics.ts';
-import { WALL_CHECK_LABELS, WALL_CRITERIA as C, WALL_MESSAGES as M, type SceneClass, type WallCheckId } from './criteria.ts';
+import { WALL_CHECK_LABELS, WALL_CRITERIA as C, WALL_MESSAGES as M, type SceneClass, type WallCheckId, type WallMode } from './criteria.ts';
+
+/** Check labels that depend on which of the three wall photos this is. */
+export function checkLabel(id: WallCheckId, mode: WallMode = 'wall') {
+  if (id === 'direction') return mode === 'left' ? 'Shows the area to the left of the meter' : 'Shows the area to the right of the meter';
+  return WALL_CHECK_LABELS[id];
+}
 
 export type SceneResult = ClassResult<SceneClass>;
 /** Where the meter is, as shares of photo width/height; r = glass-cover radius as a share of photo height, if measured. */
@@ -22,16 +28,27 @@ export function estimateFeet(m: MeterSpot, width: number, height: number): WallE
 const sceneMessage = (s: SceneResult) =>
   s.status !== 'ok' ? M.point : s.top === 'meter_closeup' ? M.closeup : s.top === 'indoors' ? M.indoors : M.other;
 
-export function decideWall(e: WallEvidence): WallDecision {
-  const check = (id: WallCheckId, state: WallCheck['state'], message?: string): WallCheck => ({ id, label: WALL_CHECK_LABELS[id], state, message: state === 'fail' ? message : undefined });
-  const s = e.scene, m = e.meter, est = m ? estimateFeet(m, e.width, e.height) : null;
+/**
+ * `mode` 'wall': meter roughly central with wall on both sides (and a feet estimate).
+ * 'right' / 'left': Base's side photos. The meter sits near the opposite edge and the frame shows the area beside it.
+ * The wall recedes at an angle there, so no feet estimate.
+ */
+export function decideWall(e: WallEvidence, mode: WallMode = 'wall'): WallDecision {
+  const check = (id: WallCheckId, state: WallCheck['state'], message?: string): WallCheck => ({ id, label: checkLabel(id, mode), state, message: state === 'fail' ? message : undefined });
+  const s = e.scene, m = e.meter, est = m && mode === 'wall' ? estimateFeet(m, e.width, e.height) : null;
   const closeup = s.status === 'ok' && s.probs.meter_closeup >= C.maxMeterCloseup;
   const checks: WallCheck[] = [
     s.status !== 'ok' ? check('scene', 'skipped') : check('scene', s.probs.house_wall >= C.minHouseWall || closeup ? 'pass' : 'fail', sceneMessage(s)),
-    check('meter', m ? 'pass' : 'fail', M.noMeter),
+    check('meter', m ? 'pass' : 'fail', mode === 'wall' ? M.noMeter : M.sideNoMeter[mode]),
     // Too close if the meter cover is large in the frame, or the scene reads as a close-up of a meter.
     check('distance', !closeup && (m?.r == null || 2 * m.r <= C.maxMeterSize) ? 'pass' : 'fail', M.tooClose),
-    m
+    mode !== 'wall'
+      ? (() => {
+          if (!m) return check('direction', 'skipped');
+          const pos = mode === 'right' ? m.x : 1 - m.x; // distance of the meter from the edge it should be near
+          return check('direction', pos <= C.maxSideMeterX ? 'pass' : 'fail', pos >= 1 - C.maxSideMeterX ? M.wrongSide[mode] : M.turnMore[mode]);
+        })()
+      : m
       ? (() => {
           const leftShort = m.x < C.minSideMargin || (est != null && est.leftFt < C.minSideFeet);
           const rightShort = m.x > 1 - C.minSideMargin || (est != null && est.rightFt < C.minSideFeet);
@@ -50,14 +67,15 @@ export function decideWall(e: WallEvidence): WallDecision {
 export const wallInFocus = (m: FastMetrics) => m.sharpness >= C.minLiveSharpness && m.relSharpness >= C.minRelativeSharpness;
 
 export type WallTone = 'search' | 'adjust' | 'hold' | 'ready';
-export type WallLive = { now: number; fast: FastMetrics | null; goodFrames: number; landscape: boolean; scene: { result: SceneResult; at: number } | null };
+export type WallLive = { now: number; fast: FastMetrics | null; goodFrames: number; landscape: boolean; scene: { result: SceneResult; at: number } | null; mode?: WallMode };
 export type WallGuidance = { tone: WallTone; message: string; checks: WallCheck[] };
 
 /** One instruction at a time while framing the wide shot. The customer presses the shutter; nothing is auto-captured. */
 export function guideWall(i: WallLive): WallGuidance {
   const scene = i.scene && i.now - i.scene.at <= C.freshMs ? i.scene.result : null;
   const m = i.fast;
-  const c = (id: WallCheckId, state: WallCheck['state']): WallCheck => ({ id, label: WALL_CHECK_LABELS[id], state });
+  const mode = i.mode ?? 'wall';
+  const c = (id: WallCheckId, state: WallCheck['state']): WallCheck => ({ id, label: checkLabel(id, mode), state });
   const sceneState: WallCheck['state'] = !scene || scene.status === 'loading' ? 'pending' : scene.status !== 'ok' ? 'skipped' : scene.probs.house_wall >= C.minHouseWall ? 'pass' : 'fail';
   const checks = [
     c('scene', sceneState),
@@ -74,6 +92,6 @@ export function guideWall(i: WallLive): WallGuidance {
   if (scene?.status === 'ok' && scene.probs.house_wall < C.minHouseWall) return out('search', sceneMessage(scene));
   if (m.motion > C.maxMotion) return out('adjust', M.steady);
   if (!wallInFocus(m)) return out('adjust', M.blurry);
-  if (!scene) return out('hold', M.point);
-  return i.goodFrames >= C.readyFrames ? out('ready', M.ready) : out('hold', M.steady);
+  if (!scene) return out('hold', mode === 'wall' ? M.point : M.sidePoint[mode]);
+  return i.goodFrames >= C.readyFrames ? out('ready', mode === 'wall' ? M.ready : M.sideReady[mode]) : out('hold', M.steady);
 }

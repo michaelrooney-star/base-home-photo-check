@@ -1,4 +1,5 @@
-// "Whole meter wall" photo: acceptance rules, prompts and every message the customer sees, in one place.
+// Meter-wall photos (the whole wall, then the areas to its right and left): acceptance rules, prompts and every
+// message the customer sees, in one place.
 // Base's guide: "From as far back as possible (at least 10 steps), take a photo of the wall surrounding your meter."
 // Base uses it to plan where a 3 ft × 3 ft battery can go: within 20 ft of the meter, against the wall, on the ground,
 // not in front of windows / meters / breaker boxes, 3 ft from gas meters, with clear space in front of the meter.
@@ -43,6 +44,8 @@ export const WALL_CRITERIA = {
   maxMeterSize: 0.12,
   /** Meter centre must be at least this share of the photo width from each side edge. */
   minSideMargin: 0.2,
+  /** Side photos: the meter should sit in the outer part of the frame (right-side photo: left ≤ 40 %; left-side: mirror). */
+  maxSideMeterX: 0.4,
   /** When the scale is known: minimum wall visible on each side of the meter, feet. */
   minSideFeet: 3,
   /** When the scale is known: ground must be at least this far below the meter centre to be in frame, feet. */
@@ -62,12 +65,17 @@ export const WALL_CRITERIA = {
   rejectionsBeforeOverride: 2,
 };
 
-export type WallCheckId = 'scene' | 'meter' | 'distance' | 'sides' | 'ground' | 'orientation' | 'light' | 'focus';
+/** The three meter-wall photos Base asks for, taken one after another. */
+export type WallMode = 'wall' | 'right' | 'left';
+export const WALL_SEQUENCE: WallMode[] = ['wall', 'right', 'left'];
+
+export type WallCheckId = 'scene' | 'meter' | 'distance' | 'sides' | 'direction' | 'ground' | 'orientation' | 'light' | 'focus';
 export const WALL_CHECK_LABELS: Record<WallCheckId, string> = {
   scene: 'Outside wall of your home',
   meter: 'Meter in the photo',
   distance: 'Taken from far enough back',
   sides: 'Wall visible on both sides of the meter',
+  direction: 'Shows the area beside the meter',
   ground: 'Ground visible below the meter',
   orientation: 'Phone held sideways',
   light: 'Enough light',
@@ -92,4 +100,22 @@ export const WALL_MESSAGES = {
   moreRight: 'Include more of the wall to the right of the meter — step back or move a little to the right.',
   ground: 'Include the ground below the meter — tilt the phone down a little or step back.',
   sceneUnverified: 'We couldn’t check the scene because photo recognition didn’t load.',
+  // side photos (right / left of the meter)
+  sidePoint: { right: 'Stand about 10 steps back and face the area to the right of your meter.', left: 'Stand about 10 steps back and face the area to the left of your meter.' },
+  sideReady: {
+    right: 'Looks good — take the photo with your meter near the left edge and the wall and yard to its right in view.',
+    left: 'Looks good — take the photo with your meter near the right edge and the wall and yard to its left in view.',
+  },
+  sideNoMeter: {
+    right: 'Keep your meter in the photo, near the left edge, so we can see where the area to its right begins.',
+    left: 'Keep your meter in the photo, near the right edge, so we can see where the area to its left begins.',
+  },
+  wrongSide: {
+    right: 'This shows the area to the LEFT of your meter. Turn to face the area on its right side.',
+    left: 'This shows the area to the RIGHT of your meter. Turn to face the area on its left side.',
+  },
+  turnMore: {
+    right: 'Turn a little more to the right, so the meter sits near the left edge and the photo shows the area beside it.',
+    left: 'Turn a little more to the left, so the meter sits near the right edge and the photo shows the area beside it.',
+  },
 } as const;

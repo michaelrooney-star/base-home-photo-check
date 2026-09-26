@@ -45,6 +45,29 @@ describe('decideWall', () => {
   });
 });
 
+describe('decideWall — side photos', () => {
+  // Base's side samples: right.png (1238×560) meter at (90, 216); left.png (1242×754) meter at (984, 258).
+  const right: WallEvidence = { ...good, meter: { x: 90 / 1238, y: 216 / 560, r: 20 / 560, source: 'auto' }, width: 1238, height: 560 };
+  const left: WallEvidence = { ...good, meter: { x: 984 / 1242, y: 258 / 754, r: 31 / 754, source: 'auto' }, width: 1242, height: 754 };
+  it('accepts Base’s own right-side and left-side examples', () => {
+    expect(decideWall(right, 'right')).toMatchObject({ accepted: true, estimate: null });
+    expect(decideWall(left, 'left')).toMatchObject({ accepted: true, estimate: null });
+  });
+  it('spots a photo of the wrong side', () => {
+    expect(decideWall(left, 'right').reasons).toEqual([M.wrongSide.right]);
+    expect(decideWall(right, 'left').reasons).toEqual([M.wrongSide.left]);
+  });
+  it('asks to turn further when the meter is near the middle', () => {
+    expect(decideWall({ ...right, meter: { ...right.meter!, x: 0.5 } }, 'right').reasons).toEqual([M.turnMore.right]);
+  });
+  it('needs the meter in the side photo, with side-specific wording', () => {
+    expect(decideWall({ ...right, meter: null }, 'right').reasons).toEqual([M.sideNoMeter.right]);
+  });
+  it('labels the direction check for the side being photographed', () => {
+    expect(decideWall(left, 'left').checks.find(c => c.id === 'direction')!.label).toMatch(/left of the meter/);
+  });
+});
+
 describe('guideWall', () => {
   const base: WallLive = { now: 5000, fast: { luma: 150, sharpness: 3000, relSharpness: 1, glare: 0, motion: 1 }, goodFrames: 10, landscape: true, scene: { result: wall, at: 4500 } };
   it('says ready when steady, lit, landscape and a house wall', () => { expect(guideWall(base)).toMatchObject({ tone: 'ready', message: M.ready }); });
@@ -53,6 +76,10 @@ describe('guideWall', () => {
     expect(guideWall({ ...base, scene: { result: closeup, at: 4500 } }).message).toBe(M.closeup);
     expect(guideWall({ ...base, scene: { result: indoors, at: 4500 } }).message).toBe(M.indoors);
     expect(guideWall({ ...base, fast: { ...base.fast!, motion: 20 } }).message).toBe(M.steady);
+  });
+  it('uses side-specific wording for the side photos', () => {
+    expect(guideWall({ ...base, mode: 'right' }).message).toBe(M.sideReady.right);
+    expect(guideWall({ ...base, mode: 'left', scene: null }).message).toBe(M.sidePoint.left);
   });
   it('judges focus relative to the camera’s recent best', () => {
     expect(guideWall({ ...base, fast: { ...base.fast!, sharpness: 300, relSharpness: 0.9 } }).tone).toBe('ready');

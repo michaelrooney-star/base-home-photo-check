@@ -5,12 +5,14 @@ import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
 import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
 import { guideWall, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
-import { WALL_CRITERIA, WALL_MESSAGES, type SceneClass } from '../lib/wall/criteria';
+import { WALL_CRITERIA, WALL_MESSAGES, WALL_SEQUENCE, type SceneClass, type WallMode } from '../lib/wall/criteria';
 import { analyzeWallPhoto, decide, spotFromTap, type WallAnalysis } from '../lib/wall/locate';
 import type { useCamera } from '../lib/useCamera';
 import type { Photo } from '../lib/photos';
 
-type Props = { camera: ReturnType<typeof useCamera>; sample: string; onAccept: (p: Photo) => void };
+/** `done`: which of the three wall photos already have an accepted photo (for the progress strip). */
+type Props = { camera: ReturnType<typeof useCamera>; sample: string; mode: WallMode; done: Record<WallMode, boolean>; onAccept: (p: Photo) => void };
+const MODE_LABEL: Record<WallMode, string> = { wall: 'Whole wall', right: 'Right of meter', left: 'Left of meter' };
 type Still = { url: string; source: Photo['source'] };
 type Phase = 'live' | 'checking' | 'confirm' | 'tap' | 'result';
 const debug = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
@@ -22,7 +24,7 @@ function containRect(box: { w: number; h: number }, img: { w: number; h: number 
   return { x: (box.w - w) / 2, y: (box.h - h) / 2, w, h };
 }
 
-export function WallCapture({ camera, sample, onAccept }: Props) {
+export function WallCapture({ camera, sample, mode, done, onAccept }: Props) {
   const [phase, setPhase] = useState<Phase>('live');
   const [still, setStill] = useState<Still | null>(null);
   const [analysis, setAnalysis] = useState<WallAnalysis | null>(null);
@@ -58,11 +60,11 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
   }, [camera.stream, phase]);
 
   const finish = useCallback((a: WallAnalysis, meter: MeterSpot | null) => {
-    const d = decide(a, meter);
+    const d = decide(a, meter, mode);
     setSpot(meter); setDecision(d); setPhase('result');
     if (!d.accepted) setRejections(n => n + 1);
     if (debug) setDebugInfo(i => ({ ...i, meter, estimate: d.estimate }));
-  }, []);
+  }, [mode]);
 
   const check = useCallback(async (s: Still) => {
     const id = ++run.current;
@@ -100,7 +102,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
       m.relSharpness = focus(performance.now(), m.sharpness);
       live.current.prev = small; live.current.fast = m; live.current.landscape = v.videoWidth >= v.videoHeight;
       live.current.goodFrames = m.luma >= WALL_CRITERIA.minLuma && wallInFocus(m) && m.motion <= WALL_CRITERIA.maxMotion ? live.current.goodFrames + 1 : 0;
-      const g = guideWall({ ...live.current, now: performance.now() });
+      const g = guideWall({ ...live.current, mode, now: performance.now() });
       setGuidance(prev => (prev && prev.message === g.message && prev.tone === g.tone && JSON.stringify(prev.checks) === JSON.stringify(g.checks) ? prev : g));
       if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), relSharp: m.relSharpness.toFixed(2), motion: m.motion.toFixed(1) }));
     }, 125);
@@ -116,7 +118,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
       }
     })();
     return () => { alive = false; clearInterval(tick); };
-  }, [phase, camera.stream, videoReady]);
+  }, [phase, camera.stream, videoReady, mode]);
 
   async function pick(x: number, y: number) {
     if (!analysis) return;
@@ -142,7 +144,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     if (!still || !decision) return;
     const s = still; stillRef.current = null; setStill(null);
     const est = decision.estimate;
-    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(est ? { details: `About ${Math.round(est.leftFt)} ft of wall visible left of the meter and ${Math.round(est.rightFt)} ft right (estimate)` } : {}) } });
+    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(est && mode === 'wall' ? { details: `About ${Math.round(est.leftFt)} ft of wall visible left of the meter and ${Math.round(est.rightFt)} ft right (estimate)` } : {}) } });
   }
 
   const tone = guidance?.tone ?? 'search';
@@ -152,17 +154,22 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
   const d = decision, est = d?.estimate;
 
   return <>
+    <ol className="wall-steps" aria-label="Meter wall photos">
+      {WALL_SEQUENCE.map((m, i) => <li key={m} className={m === mode ? 'current' : done[m] ? 'done' : ''} aria-current={m === mode ? 'step' : undefined}>
+        <b>{done[m] && m !== mode ? <Check size={12} /> : i + 1}</b>{MODE_LABEL[m]}</li>)}
+    </ol>
     <div ref={frame} className={`camera-frame wall-frame ${phase !== 'live' ? 'has-photo' : ''} ${phase === 'tap' ? 'tapping' : ''} ${tone === 'ready' && phase === 'live' ? 'ready' : ''}`}
       onPointerUp={onTap} onKeyDown={onKey} tabIndex={phase === 'tap' ? 0 : -1} role={phase === 'tap' ? 'application' : undefined}
       aria-label={phase === 'tap' ? 'Photo: tap your meter, or use the arrow keys to move the marker and press Enter' : undefined}>
       {phase !== 'live' && still ? <>
-        <img src={still.url} alt={still.source === 'sample' ? 'Meter wall — Base guide sample' : 'Your meter wall photo'} draggable={false} />
+        <img src={still.url} alt={`${MODE_LABEL[mode]} — ${still.source === 'sample' ? 'Base guide sample' : 'your photo'}`} draggable={false} />
         {phase === 'confirm' && ring(spot, 'proposed')}
         {phase === 'tap' && ring({ ...cursor, r: null }, 'cursor')}
         {phase === 'result' && ring(spot, d?.accepted ? 'good' : 'placed')}
       </> : camera.stream ? <>
         <video ref={video} autoPlay playsInline muted onLoadedData={() => setVideoReady(true)} aria-label="Live camera preview" />
         <div className="wall-guide" aria-hidden="true"><i /><i /><i /><i /><span>Keep the ground in view</span></div>
+        {mode !== 'wall' && <div className={`meter-zone ${mode}`} aria-hidden="true"><span>Meter here</span></div>}
         <div className={`guide-message ${tone}`} role="status" aria-live="polite">{tone === 'ready' ? <CircleCheck size={17} /> : null}{guidance?.message ?? WALL_MESSAGES.loading}</div>
         <button className="shutter" aria-label="Take photo" disabled={!videoReady} onClick={capture}><span /></button>
       </> : <div className="camera-empty"><h3>{camera.status === 'requesting' ? 'Allow your camera to get started' : 'Turn on your camera'}</h3><p>{camera.status === 'unavailable' ? 'Your camera isn’t available. You can upload a photo instead.' : 'We’ll guide you to a photo Base can use.'}</p><button className="button" onClick={() => void camera.start()} disabled={camera.status === 'requesting'}>Use camera</button></div>}
@@ -171,7 +178,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
 
     {phase === 'live' && <>
       <ul className="live-checks" aria-label="Photo requirements">{(guidance?.checks ?? []).map(c => <Chip key={c.id} c={c} />)}</ul>
-      <p className="model-status">{models.subject === 'failed' ? <>Photo recognition didn’t load{debug ? `: ${models.error}` : ''}. You can still take the photo; we’ll ask you to point out the meter.</> : models.subject !== 'ready' ? <><Loader2 size={12} className="spin" /> Loading on-device photo recognition… (first time only)</> : <>Take the photo when the whole wall, the meter and the ground are in view. Checked on this device.</>}</p>
+      <p className="model-status">{models.subject === 'failed' ? <>Photo recognition didn’t load{debug ? `: ${models.error}` : ''}. You can still take the photo; we’ll ask you to point out the meter.</> : models.subject !== 'ready' ? <><Loader2 size={12} className="spin" /> Loading on-device photo recognition… (first time only)</> : <>{mode === 'wall' ? 'Take the photo when the whole wall, the meter and the ground are in view.' : `Take the photo with your meter near the ${mode === 'right' ? 'left' : 'right'} edge and the area to its ${mode} in view.`} Checked on this device.</>}</p>
       {error && <p className="inline-error">{error}</p>}
       <div className="capture-fallbacks">
         <button className="button" onClick={() => file.current?.click()}><Upload size={17} /> Upload photo</button>
@@ -200,7 +207,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     {phase === 'result' && d && <div className={`meter-result ${d.accepted ? 'accepted' : 'rejected'}`}>
       <div className="meter-result-head">{d.accepted ? <CircleCheck size={26} /> : <CircleAlert size={26} />}<div>
         <h3>{d.accepted ? 'Photo accepted' : 'Photo not accepted'}</h3>
-        <p>{d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
+        <p>{d.accepted && mode !== 'wall' ? `The area to the ${mode} of your meter is in view.` : d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
       </div></div>
       <ul className="result-checks">{d.checks.filter(c => c.state !== 'skipped').map(c => <li key={c.id} className={c.state}>{c.state === 'pass' ? <Check size={15} /> : <CircleAlert size={15} />}<span><b>{c.label}</b>{c.state === 'fail' && c.message && c.message !== d.reasons[0] && <small>{c.message}</small>}</span></li>)}</ul>
       {still?.source === 'sample' && <p className="sample-disclaimer">Example from Base’s photo guide. This isn’t a photo of your home.</p>}
