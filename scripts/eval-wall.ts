@@ -12,13 +12,14 @@ import { decideWall, type MeterSpot } from '../src/lib/wall/assess.ts';
 import { findMeterCircles, type CvCircles, type Rgba } from '../src/lib/wall/circles.ts';
 import type { WallMode } from '../src/lib/wall/criteria.ts';
 import { decodeDetections, DETECTOR_SIZE, letterbox, toTensor } from '../src/lib/wall/objects.ts';
+import { checkGround } from '../src/lib/wall/ground.ts';
 import { checkRuler, describeSpace, findSpace, greenProfile, plantBand } from '../src/lib/wall/space.ts';
 
 const require = createRequire(import.meta.url);
 const { PNG } = require('pngjs') as { PNG: { sync: { read(b: Buffer): { width: number; height: number; data: Buffer } } } };
 const args = process.argv.slice(2), verbose = args.includes('--verbose');
 const dir = args.find(a => !a.startsWith('--')) ?? 'eval/wall/real';
-type Entry = { file: string; step: string; note?: string; meter?: [number, number] };
+type Entry = { file: string; step: string; note?: string; meter?: [number, number]; ground?: boolean };
 const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as Entry[];
 const cv = (await require('@techstark/opencv-js')) as CvCircles;
 const session = await ort.InferenceSession.create('public/models/wall-objects.onnx');
@@ -55,7 +56,8 @@ for (const e of manifest) {
   const meter = picked && checkRuler(picked, dets, img.width, img.height);
 
   const scene = { status: 'ok' as const, top: 'house_wall' as const, probs: { house_wall: 1, meter_closeup: 0, indoors: 0, other: 0 } };
-  const d = decideWall({ scene, meter, width: img.width, height: img.height, luma: 120, sharpness: 100 }, mode);
+  const gr = meter ? checkGround({ rgba: small.data, width: small.width, height: small.height, meter, detections: dets }) : null;
+  const d = decideWall({ scene, meter, width: img.width, height: img.height, luma: 120, sharpness: 100, groundSeen: gr?.visible }, mode);
   console.log(`\n${e.file} [${mode}] ${e.note ?? ''}`);
   console.log(`  meter: ${meter ? `x ${meter.x.toFixed(2)} y ${meter.y.toFixed(2)} r ${meter.r?.toFixed(3) ?? '—'} (${meter.source})` : 'not found'}   detector ${Math.round(ms)} ms`);
   if (verbose) for (const k of dets) console.log(`    ${k.kind.padEnd(7)} ${k.label.padEnd(26)} ${k.score.toFixed(2)}  x ${k.x0.toFixed(2)}–${k.x1.toFixed(2)} y ${k.y0.toFixed(2)}–${k.y1.toFixed(2)}`);
@@ -64,6 +66,7 @@ for (const e of manifest) {
     const green = greenProfile(small.data, small.width, small.height, ...plantBand(meter));
     const f = findSpace({ meter, detections: dets, green, width: img.width, height: img.height, mode });
     console.log(`  space: ${describeSpace(f)}`);
+    console.log(`  ground: ${gr!.visible ? 'visible' : 'NOT visible'} (green ${gr!.green.toFixed(2)}, earth ${gr!.earth.toFixed(2)}, same as wall ${gr!.sameAsWall.toFixed(2)}, ${gr!.belowFt?.toFixed(1) ?? '?'} ft below meter)${e.ground === undefined ? '' : e.ground === gr!.visible ? '  ✓' : '  ✗ expected ' + (e.ground ? 'visible' : 'not visible')}`);
     if (verbose) for (const s of f.stretches) console.log(`    clear ${s.side} ${s.x0.toFixed(2)}–${s.x1.toFixed(2)} ${s.ft?.toFixed(1) ?? '?'} ft, ${s.gapFt?.toFixed(1) ?? '?'} ft from meter${s.open ? ', runs off the photo' : ''}`);
   }
 }

@@ -79,3 +79,30 @@
 .not-needed{color:#6b7280}
 .wall-steps li.skipped{opacity:.55;text-decoration:line-through}
 .space-summary{display:flex;gap:8px;align-items:flex-start;margin:0 0 16px;padding:10px 12px;border-radius:10px;background:#f1f5ef;font-size:14px}
+.photo-goals{margin:14px 0 4px;padding:14px 16px;border-radius:12px;background:#f5f7f2;border:1px solid #dfe5d8}
+.photo-goals strong{display:block;font-size:15px;margin-bottom:6px}
+.photo-goals ul{margin:0;padding-left:18px;display:grid;gap:3px;font-size:14px}
+.photo-goals p{margin:8px 0 0;font-size:13px;color:#4b5563}
+.goal-list{list-style:none;margin:14px 0;padding:0;display:grid;gap:10px}
+.goal-list li{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+.goal-list li>svg{flex:none;margin-top:2px}
+.goal-list li span{display:grid;gap:2px}
+.goal-list small{font-size:13px;color:#4b5563}
+.goal-list li.pass>svg{color:#15803d}
+.goal-list li.fail>svg{color:#b91c1c}
+.goal-list li.warn>svg{color:#b45309}
+.goal-list li.info>svg{color:#2563eb}
+.fix-callout{margin:4px 0 14px;padding:14px 16px;border-radius:12px;background:#fdecea;border:2px solid #e8a39b}
+.fix-callout strong{display:block;font-size:16px;margin-bottom:4px}
+.fix-callout p{margin:0;font-size:15px;line-height:1.45}
+.fix-callout.improve{background:#fff4e0;border-color:#f0b75a}
+.fix-callout .lens-tip{margin-top:8px;display:flex;gap:6px;align-items:center}
+.fix-callout .muted-line{margin-top:8px;font-size:13px;color:#6b5a3a}
+.meter-result.improve{border-color:#f0b75a}
+.meter-result.improve .meter-result-head svg{color:#b45309}
+.cant-step{width:100%;margin-top:10px}
+.all-checks{margin-top:14px;font-size:13px}
+.all-checks summary{cursor:pointer;color:#4b5563}
+.ground-missing{position:absolute;height:34px;z-index:2;pointer-events:none;border-top:3px dashed #fbbf24;background:linear-gradient(#fbbf2433,#fbbf2400);display:flex;justify-content:center}
+.ground-missing span{margin-top:4px;background:#78350f;color:#fff;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px}
+.photo-goals ul{list-style:disc}

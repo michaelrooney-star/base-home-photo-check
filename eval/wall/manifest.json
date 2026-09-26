@@ -6,7 +6,8 @@
   "meter": [
    0.489,
    0.381
-  ]
+  ],
+  "ground": true
  },
  {
   "file": "right.png",
@@ -15,7 +16,8 @@
   "meter": [
    0.073,
    0.386
-  ]
+  ],
+  "ground": true
  },
  {
   "file": "left.png",
@@ -24,7 +26,8 @@
   "meter": [
    0.792,
    0.342
-  ]
+  ],
+  "ground": true
  },
  {
   "file": "adjacent.png",

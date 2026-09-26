@@ -81,7 +81,7 @@ export const WALL_CHECK_LABELS: Record<WallCheckId, string> = {
   distance: 'Taken from far enough back',
   sides: 'Wall visible on both sides of the meter',
   direction: 'Shows the area beside the meter',
-  ground: 'Ground visible below the meter',
+  ground: 'Ground in front of the wall',
   orientation: 'Phone held sideways',
   light: 'Enough light',
   focus: 'In focus',
@@ -103,7 +103,7 @@ export const WALL_MESSAGES = {
   tooClose: 'You’re too close to the meter. Step back until the wall on both sides of the meter and the ground below it are in the photo.',
   moreLeft: 'Include more of the wall to the left of the meter — step back or move a little to the left.',
   moreRight: 'Include more of the wall to the right of the meter — step back or move a little to the right.',
-  ground: 'Include the ground below the meter — tilt the phone down a little or step back.',
+  ground: 'We can’t see the ground. Tilt your phone down or step back until the ground in front of the wall is in the photo — that’s where the battery would stand.',
   sceneUnverified: 'We couldn’t check the scene because photo recognition didn’t load.',
   // side photos (right / left of the meter)
   sidePoint: { right: 'Stand about 10 steps back and face the area to the right of your meter.', left: 'Stand about 10 steps back and face the area to the left of your meter.' },

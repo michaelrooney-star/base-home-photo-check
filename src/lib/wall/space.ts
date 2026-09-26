@@ -105,7 +105,8 @@ export function findSpace(e: { meter: MeterSpot; detections: Detection[]; green:
   const cols = e.green.length;
   for (let c = 0; c < cols; ) {
     if (e.green[c] < SPACE.plantColumn) { c++; continue; }
-    let d = c; while (d < cols && e.green[d] >= SPACE.plantColumn) d++;
+    let d = c; // a run of plant columns, bridging single-column gaps
+    while (d < cols && (e.green[d] >= SPACE.plantColumn || (d + 1 < cols && e.green[d + 1] >= SPACE.plantColumn))) d++;
     blockers.push({ kind: 'plants', name: NAME.plants, x0: c / cols, x1: d / cols });
     c = d;
   }

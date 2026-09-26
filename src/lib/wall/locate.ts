@@ -6,6 +6,7 @@ import { decideWall, type MeterSpot, type SceneResult, type WallDecision } from 
 import { circleNear, findMeterCircles, loadCv, type Circle, type Rgba } from './circles.ts';
 import { WALL_CRITERIA, type CandidateClass, type SceneClass, type WallMode } from './criteria.ts';
 import { decodeDetections, letterbox, type Detection } from './objects.ts';
+import { checkGround, type GroundCheck } from './ground.ts';
 import { checkRuler, findSpace, greenProfile, plantBand, type SpaceFinding } from './space.ts';
 
 export type Candidate = { circle: Circle; p: number | null };
@@ -72,7 +73,11 @@ export async function spotFromTap(a: WallAnalysis, x: number, y: number): Promis
 }
 
 export const decide = (a: WallAnalysis, meter: MeterSpot | null, mode: WallMode = 'wall', limitedSpace = false): WallDecision =>
-  decideWall({ scene: a.scene, meter, width: a.img.naturalWidth, height: a.img.naturalHeight, luma: a.luma, sharpness: a.sharpness, limitedSpace }, mode);
+  decideWall({ scene: a.scene, meter, width: a.img.naturalWidth, height: a.img.naturalHeight, luma: a.luma, sharpness: a.sharpness, limitedSpace, groundSeen: meter ? groundOf(a, meter).visible : undefined }, mode);
+
+/** Is the ground in the photo (ground.ts)? */
+export const groundOf = (a: WallAnalysis, meter: MeterSpot): GroundCheck =>
+  checkGround({ rgba: a.rgba.data, width: a.rgba.width, height: a.rgba.height, meter, detections: a.detections ?? [] });
 
 /** Clear wall beside the confirmed meter, or null without the detector. */
 export function measureSpace(a: WallAnalysis, meter: MeterSpot, mode: WallMode): SpaceFinding | null {

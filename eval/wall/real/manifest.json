@@ -15,7 +15,8 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": false
  },
  {
   "file": "205_meter_closeup.jpg",
@@ -33,7 +34,8 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": false
  },
  {
   "file": "205_right.jpg",
@@ -42,7 +44,8 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": false
  },
  {
   "file": "205_wall_wide_ac.jpg",
@@ -51,7 +54,8 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": true
  },
  {
   "file": "203_meter_closeup.jpg",
@@ -69,7 +73,8 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": true
  },
  {
   "file": "203_left_wide.jpg",
@@ -78,7 +83,8 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": true
  },
  {
   "file": "203_right.jpg",
@@ -87,6 +93,7 @@
   "size": [
    2016,
    1512
-  ]
+  ],
+  "ground": true
  }
 ]

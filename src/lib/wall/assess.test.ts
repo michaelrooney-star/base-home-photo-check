@@ -69,6 +69,11 @@ describe('decideWall', () => {
     expect(decideWall({ ...good, meter: { ...good.meter!, x: 0.1 } }).reasons).toContain(M.moreLeft);
     expect(decideWall({ ...good, meter: { ...good.meter!, x: 0.92 } }).reasons).toContain(M.moreRight);
   });
+  it('asks for the ground when the bottom of the photo is still wall, with its own instruction', () => {
+    const d = decideWall({ ...good, groundSeen: false });
+    expect(d.reasons).toEqual([M.ground]);
+    expect(decideWall({ ...good, groundSeen: true }).accepted).toBe(true);
+  });
   it('asks for the ground when the meter sits low in the frame', () => {
     expect(decideWall({ ...good, meter: { ...good.meter!, y: 0.9 } }).reasons).toContain(M.ground);
     expect(decideWall({ ...good, meter: { ...good.meter!, y: 0.9, r: null } }).reasons).toContain(M.ground);

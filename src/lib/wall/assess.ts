@@ -14,7 +14,9 @@ export type SceneResult = ClassResult<SceneClass>;
 export type MeterSpot = { x: number; y: number; r: number | null; source: 'auto' | 'tap' };
 export type WallCheck = { id: WallCheckId; label: string; state: 'pass' | 'fail' | 'pending' | 'skipped'; message?: string };
 export type WallEstimate = { leftFt: number; rightFt: number; belowFt: number };
-export type WallEvidence = { scene: SceneResult; meter: MeterSpot | null; width: number; height: number; luma: number; sharpness: number; limitedSpace?: boolean };
+export type WallEvidence = { scene: SceneResult; meter: MeterSpot | null; width: number; height: number; luma: number; sharpness: number; limitedSpace?: boolean;
+  /** Does the bottom of the photo look like ground (ground.ts)? Absent = not checked. */
+  groundSeen?: boolean };
 export type WallDecision = { accepted: boolean; checks: WallCheck[]; reasons: string[]; estimate: WallEstimate | null; limitedSpace?: boolean };
 
 /** Rough feet of wall visible left/right of the meter and below it, using the meter cover as a ruler. */
@@ -51,13 +53,13 @@ export function decideWall(e: WallEvidence, mode: WallMode = 'wall'): WallDecisi
         return check('sides', leftShort || rightShort ? 'fail' : 'pass', leftShort ? M.moreLeft : M.moreRight);
       })()
     : check('sides', 'skipped');
-  const ground = m ? check('ground', (est ? est.belowFt >= C.minBelowFeet : m.y <= C.maxMeterY) ? 'pass' : 'fail', M.ground) : check('ground', 'skipped');
+  const ground = m ? check('ground', (est ? est.belowFt >= C.minBelowFeet : m.y <= C.maxMeterY) && e.groundSeen !== false ? 'pass' : 'fail', M.ground) : check('ground', 'skipped');
   // "10 steps back" is a stand-in for coverage. If the photo measurably shows the wall beside the meter and the ground
   // (meter cover used as a ruler), it is far enough back, however big the meter looks. Without a scale we can't tell.
   // Side photos: the ruler gives a lower bound on the wall shown beyond the meter (the far wall looks smaller).
   const pxPerFt = m?.r ? ((2 * m.r * e.height) / C.meterCoverInches) * 12 : null;
   const sideFt = m && pxPerFt && mode !== 'wall' ? ((mode === 'right' ? 1 - m.x : m.x) * e.width) / pxPerFt : null;
-  const covered = (mode === 'wall' ? est != null : sideFt != null && sideFt >= C.minSideFeet) && width.state === 'pass' && ground.state === 'pass';
+  const covered = (mode === 'wall' ? est != null : sideFt != null && sideFt >= C.minSideFeet) && width.state === 'pass'; // the ground has its own check and fix
   const looksClose = closeup || (m?.r != null && 2 * m.r > C.maxMeterSize);
   const checks: WallCheck[] = [
     s.status !== 'ok' ? check('scene', 'skipped') : check('scene', s.probs.house_wall >= C.minHouseWall || closeup ? 'pass' : 'fail', sceneMessage(s)),
