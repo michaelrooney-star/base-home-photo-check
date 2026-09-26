@@ -33,6 +33,7 @@ class WorkerImageRaw extends ImageRawBase {
 const FileUtils = { async read(url: string) { return (await fetch(url)).text(); } };
 
 type InitMsg = { type: 'init'; ortBase: string; paddleBase: string; clipModel: string | null; prompts: string[] };
+type ClassifyMsg = { type: 'classify'; id: number; images: { width: number; height: number; data: Uint8ClampedArray }[] };
 type AnalyzeMsg = { type: 'analyze'; id: number; width: number; height: number; data: Uint8ClampedArray; subject?: { width: number; height: number; data: Uint8ClampedArray } };
 
 let ocr: Promise<Ocr> | null = null;
@@ -56,20 +57,31 @@ function init(m: InitMsg) {
 }
 
 async function analyze(m: AnalyzeMsg) {
-  const out: { type: 'result'; id: number; lines?: Line[]; ocrError?: string; probs?: number[]; subjectError?: string } = { type: 'result', id: m.id };
+  const out: { type: 'result'; id: number; lines?: Line[]; ocrError?: string; logits?: number[]; subjectError?: string } = { type: 'result', id: m.id };
   try { out.lines = (await (await ocr!).detect({ data: m.data, width: m.width, height: m.height })).texts; }
   catch (e) { out.ocrError = String((e as Error)?.message ?? e); }
   if (m.subject) {
     try {
       if (!clip) throw new Error('Meter recognition is not loaded');
-      out.probs = await (await clip).classify(new RawImage(m.subject.data, m.subject.width, m.subject.height, 4));
+      out.logits = await (await clip).classify(new RawImage(m.subject.data, m.subject.width, m.subject.height, 4));
     } catch (e) { out.subjectError = String((e as Error)?.message ?? e); }
   }
   return out;
 }
 
-self.onmessage = (e: MessageEvent<InitMsg | AnalyzeMsg>) => {
+/** CLIP only, for a batch of crops (e.g. meter candidates in a wide wall photo). */
+async function classify(m: ClassifyMsg) {
+  try {
+    if (!clip) throw new Error('Photo recognition is not loaded');
+    const c = await clip, logits: number[][] = [];
+    for (const im of m.images) logits.push(await c.classify(new RawImage(im.data, im.width, im.height, 4)));
+    return { type: 'classified', id: m.id, logits };
+  } catch (e) { return { type: 'classified', id: m.id, error: String((e as Error)?.message ?? e) }; }
+}
+
+self.onmessage = (e: MessageEvent<InitMsg | AnalyzeMsg | ClassifyMsg>) => {
   const m = e.data;
   if (m.type === 'init') { init(m); return; }
+  if (m.type === 'classify') { queue = queue.then(() => classify(m)).then(r => self.postMessage(r)); return; }
   queue = queue.then(() => analyze(m)).then(r => self.postMessage(r), err => self.postMessage({ type: 'result', id: m.id, ocrError: String(err) }));
 };

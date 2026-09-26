@@ -1,22 +1,49 @@
-// Main-thread client for analyzer.worker.ts: reads text lines (PaddleOCR) and classifies the subject (CLIP).
+// Main-thread client for analyzer.worker.ts: reads text lines (PaddleOCR) and classifies images (CLIP zero-shot).
+import { CANDIDATE_CLASSES, CANDIDATE_PROMPTS, SCENE_CLASSES, SCENE_PROMPTS } from '../wall/criteria.ts';
 import type { SubjectResult } from './acceptance.ts';
 import { SUBJECT_CLASSES, SUBJECT_PROMPTS, type SubjectClass } from './criteria.ts';
 import type { OcrLine } from './number.ts';
 
 export const DEFAULT_SUBJECT_MODEL = 'Xenova/clip-vit-base-patch32';
-export const PROMPTS = SUBJECT_CLASSES.flatMap(c => SUBJECT_PROMPTS[c].map(p => ({ c, p })));
 
-/** Sums per-prompt probabilities into per-class probabilities. */
-export function aggregate(promptProbs: number[]): SubjectResult {
-  const probs = Object.fromEntries(SUBJECT_CLASSES.map(c => [c, 0])) as Record<SubjectClass, number>;
-  PROMPTS.forEach(({ c }, i) => { probs[c] += promptProbs[i] ?? 0; });
-  const top = SUBJECT_CLASSES.reduce((a, b) => (probs[b] > probs[a] ? b : a));
+/** Every CLIP question the app asks. Each set is scored separately (softmax over its own prompts). */
+const SETS = {
+  subject: { classes: SUBJECT_CLASSES, prompts: SUBJECT_PROMPTS },
+  scene: { classes: SCENE_CLASSES, prompts: SCENE_PROMPTS },
+  candidate: { classes: CANDIDATE_CLASSES, prompts: CANDIDATE_PROMPTS },
+} as const;
+export type PromptSet = keyof typeof SETS;
+export const PROMPTS = (Object.keys(SETS) as PromptSet[]).flatMap(set => {
+  const spec = SETS[set] as { classes: readonly string[]; prompts: Record<string, string[]> };
+  return spec.classes.flatMap(c => spec.prompts[c].map(p => ({ set, c, p })));
+});
+
+export type ClassResult<C extends string> = { status: 'ok'; top: C; probs: Record<C, number> } | { status: 'loading' } | { status: 'unavailable'; error?: string };
+
+/** Softmax over one set's prompts, then sums prompt probabilities into class probabilities. */
+export function scoreSet<C extends string>(set: PromptSet, logits: number[]): { status: 'ok'; top: C; probs: Record<C, number> } {
+  const idx = PROMPTS.flatMap((p, i) => (p.set === set ? [i] : []));
+  const max = Math.max(...idx.map(i => logits[i])), exps = idx.map(i => Math.exp(logits[i] - max)), sum = exps.reduce((a, b) => a + b, 0);
+  const classes = SETS[set].classes as unknown as readonly C[];
+  const probs = Object.fromEntries(classes.map(c => [c, 0])) as Record<C, number>;
+  idx.forEach((i, k) => { probs[PROMPTS[i].c as C] += exps[k] / sum; });
+  const top = classes.reduce((a, b) => (probs[b] > probs[a] ? b : a));
   return { status: 'ok', top, probs };
 }
+/** Electric meter / gas meter / breaker panel … for the meter step. */
+export const aggregate = (logits: number[]): SubjectResult => scoreSet<SubjectClass>('subject', logits);
 
-/** ?subject=electric_meter|gas_meter|breaker_panel|other|off fakes the classifier (offline demos, automated tests). */
+const param = (k: string) => (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get(k));
+/** ?subject=… (meter step) or ?scene=… (wall step) fake the classifier for offline demos and automated tests. CLIP isn't loaded then. */
+const mocking = () => !!(param('subject') || param('scene'));
+export function mockScene(): ClassResult<(typeof SCENE_CLASSES)[number]> | null {
+  const q = param('scene'); if (!q) return null;
+  if (q === 'off') return { status: 'unavailable', error: 'disabled by ?scene=off' };
+  const c = ((SCENE_CLASSES as readonly string[]).includes(q) ? q : 'house_wall') as (typeof SCENE_CLASSES)[number];
+  return { status: 'ok', top: c, probs: Object.fromEntries(SCENE_CLASSES.map(k => [k, k === c ? 0.9 : 0.1 / 3])) as Record<(typeof SCENE_CLASSES)[number], number> };
+}
 function mockSubject(): SubjectResult | null {
-  const q = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('subject');
+  const q = param('subject');
   if (!q) return null;
   if (q === 'off') return { status: 'unavailable', error: 'disabled by ?subject=off' };
   const c = (SUBJECT_CLASSES as readonly string[]).includes(q) ? (q as SubjectClass) : 'electric_meter';
@@ -25,7 +52,7 @@ function mockSubject(): SubjectResult | null {
 
 export type ModelState = 'loading' | 'ready' | 'failed';
 type Status = { ocr: ModelState; subject: ModelState; error: string };
-const status: Status = { ocr: 'loading', subject: mockSubject() ? 'ready' : 'loading', error: '' };
+const status: Status = { ocr: 'loading', subject: mocking() ? 'ready' : 'loading', error: '' };
 const listeners = new Set<(s: Status) => void>();
 const emit = () => listeners.forEach(l => l({ ...status }));
 export function onModelStatus(l: (s: Status) => void) { listeners.add(l); l({ ...status }); return () => { listeners.delete(l); }; }
@@ -33,7 +60,8 @@ export function onModelStatus(l: (s: Status) => void) { listeners.add(l); l({ ..
 let worker: Worker | null = null;
 let ocrReady: Promise<void> | null = null;
 let nextId = 0;
-const pending = new Map<number, (r: { lines?: OcrLine[]; ocrError?: string; probs?: number[]; subjectError?: string }) => void>();
+type WorkerResult = { lines?: OcrLine[]; ocrError?: string; logits?: number[] | number[][]; subjectError?: string; error?: string };
+const pending = new Map<number, (r: WorkerResult) => void>();
 
 export function prewarmAnalyzer(): Promise<void> {
   if (ocrReady) return ocrReady;
@@ -45,7 +73,7 @@ export function prewarmAnalyzer(): Promise<void> {
       else if (m.type === 'ocr-error') { status.ocr = 'failed'; status.error = m.error; emit(); reject(new Error(m.error)); }
       else if (m.type === 'subject-ready') { status.subject = 'ready'; emit(); }
       else if (m.type === 'subject-error') { status.subject = 'failed'; status.error = m.error; emit(); console.warn('[meter] subject classifier failed to load:', m.error); }
-      else if (m.type === 'result') { const done = pending.get(m.id); pending.delete(m.id); done?.(m); }
+      else if (m.type === 'result' || m.type === 'classified') { const done = pending.get(m.id); pending.delete(m.id); done?.(m); }
     };
     worker.onerror = e => { status.ocr = 'failed'; status.error = e.message || 'worker error'; emit(); reject(new Error(status.error)); };
     const params = new URLSearchParams(location.search);
@@ -53,7 +81,7 @@ export function prewarmAnalyzer(): Promise<void> {
       type: 'init',
       ortBase: new URL('/vendor/ort/', location.href).href,
       paddleBase: new URL('/vendor/paddle/', location.href).href,
-      clipModel: mockSubject() ? null : params.get('subjectModel') || DEFAULT_SUBJECT_MODEL,
+      clipModel: mocking() ? null : params.get('subjectModel') || DEFAULT_SUBJECT_MODEL,
       prompts: PROMPTS.map(x => x.p),
     });
   });
@@ -80,15 +108,32 @@ export async function analyze(img: ImageData, subjectImg?: ImageData): Promise<A
   const wantSubject = !!subjectImg && !mock && status.subject === 'ready';
   const id = nextId++, data = new Uint8ClampedArray(img.data);
   const subject = wantSubject ? { width: subjectImg!.width, height: subjectImg!.height, data: new Uint8ClampedArray(subjectImg!.data) } : undefined;
-  const r = await new Promise<Parameters<typeof pending.set>[1] extends (x: infer R) => void ? R : never>(resolve => {
+  const r = await new Promise<WorkerResult>(resolve => {
     pending.set(id, resolve);
     worker!.postMessage({ type: 'analyze', id, width: img.width, height: img.height, data, subject }, subject ? [data.buffer, subject.data.buffer] : [data.buffer]);
   });
   const subjectResult: SubjectResult | null = !subjectImg ? null
     : mock ? mock
-    : r.probs ? aggregate(r.probs)
+    : r.logits ? aggregate(r.logits as number[])
     : status.subject === 'failed' ? { status: 'unavailable', error: status.error }
     : r.subjectError ? { status: 'unavailable', error: r.subjectError }
     : { status: 'loading' };
   return { lines: r.lines ?? null, ocrError: r.ocrError, subject: subjectResult };
+}
+
+/**
+ * CLIP-only classification of several images against one prompt set (no OCR). Returns null when the classifier
+ * isn't available (not loaded, failed, or mocked), so callers can fall back.
+ */
+export async function classifyImages<C extends string>(images: ImageData[], set: PromptSet): Promise<{ status: 'ok'; top: C; probs: Record<C, number> }[] | null> {
+  await prewarmAnalyzer().catch(() => undefined);
+  if (mocking() || status.subject !== 'ready' || !worker || !images.length) return null;
+  const id = nextId++;
+  const payload = images.map(im => ({ width: im.width, height: im.height, data: new Uint8ClampedArray(im.data) }));
+  const r = await new Promise<WorkerResult>(resolve => {
+    pending.set(id, resolve);
+    worker!.postMessage({ type: 'classify', id, images: payload }, payload.map(p => p.data.buffer));
+  });
+  if (!r.logits) return null;
+  return (r.logits as number[][]).map(l => scoreSet<C>(set, l));
 }

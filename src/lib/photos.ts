@@ -1,14 +1,14 @@
 export type PhotoId = 'meter' | 'wall' | 'right' | 'left' | 'adjacent' | 'fence' | 'breaker' | 'rating';
 export type Answer = 'yes' | 'no' | 'unsure' | null;
 /** Result of the automatic meter-photo check. `override` = customer sent it anyway after rejections. */
-export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean };
+export type PhotoCheck = { accepted: boolean; meterNumber: string | null; reasons: string[]; override?: boolean; details?: string };
 export type Photo = { url: string; source: 'camera' | 'upload' | 'sample'; status: 'confirmed' | 'retake'; warnings: string[]; check?: PhotoCheck };
 export type Photos = Partial<Record<PhotoId, Photo>>;
 export type PhotoStep = { id: PhotoId; title: string; instruction: string; tip: string; sample: string };
 export type Notes = { solar: Answer; obstructions: string[]; text: string };
 export const STEPS: PhotoStep[] = [
   {id:'meter', title:'Meter number', instruction:'Fit your electric meter inside the circle. We’ll guide you and take the photo when the meter number is readable.', tip:'Daylight works best. Keep the glass free of glare and nothing in front of the meter.', sample:'/images/meter.png'},
-  {id:'wall', title:'Whole meter wall', instruction:'Stand at least 10 steps back. Show the whole wall around the meter.', tip:'Keep the meter, the ground, and both ends of the wall in the frame.', sample:'/images/wall.png'},
+  {id:'wall', title:'Whole meter wall', instruction:'Stand at least 10 steps back with your phone sideways. Show the meter, the wall on both sides of it, and the ground.', tip:'Daylight works best. Move bins, hoses or anything else blocking the wall if you can.', sample:'/images/wall.png'},
   {id:'right', title:'Right side of meter', instruction:'From farther back, show the wall and area to the right of the meter.', tip:'Aim for at least 10 steps back, if you can do so safely.', sample:'/images/right.png'},
   {id:'left', title:'Left side of meter', instruction:'From farther back, show the wall and area to the left of the meter.', tip:'Aim for at least 10 steps back, if you can do so safely.', sample:'/images/left.png'},
   {id:'adjacent', title:'Adjacent wall', instruction:'Show the wall around the nearest corner, from corner to corner.', tip:'Include the ground and any nearby objects.', sample:'/images/adjacent.png'},

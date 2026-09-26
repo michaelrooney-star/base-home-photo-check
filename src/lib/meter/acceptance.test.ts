@@ -42,8 +42,11 @@ describe('guide (live instructions)', () => {
 });
 
 describe('aggregate', () => {
-  it('sums prompt probabilities per class', () => {
-    const probs = PROMPTS.map(p => (p.c === 'gas_meter' ? 0.3 : 0.4 / (PROMPTS.length - 2)));
-    const r = aggregate(probs); expect(r.status === 'ok' && r.top).toBe('gas_meter');
+  it('scores each prompt set separately and sums prompts per class', () => {
+    // Logits for every prompt in every set; gas-meter prompts score highest within the meter set.
+    const logits = PROMPTS.map(p => (p.set === 'subject' && p.c === 'gas_meter' ? 30 : p.set === 'scene' ? 50 : 20));
+    const r = aggregate(logits);
+    expect(r.status === 'ok' && r.top).toBe('gas_meter');
+    expect(r.status === 'ok' && Object.values(r.probs).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 5);
   });
 });

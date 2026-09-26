@@ -29,11 +29,12 @@ A phone camera requires a secure context (HTTPS, or localhost on the phone itsel
 
 1. Tap **Start**. This is the first point at which camera access is requested.
 2. **Meter number:** fit the meter inside the circle and follow the on-screen instruction. The app takes the photo automatically once it can read the meter number, then accepts or rejects it with a reason (see [Meter photo check](#meter-photo-check)). Upload and **Try sample photo** go through the same check.
-3. Other photos: capture one still photo at a time, choose a local image, or select **Use sample photo**. No video is recorded. Confirm readability manually; retake any uncertain image.
-4. Answer the fence question. “Yes” adds the behind-fence photo; “no” removes it; “not sure” leaves the final summary incomplete until resolved. Select the breaker location, including “not sure” if needed.
-5. The rating step includes a safe skip option. Skipping never creates a completed photo.
-6. Review thumbnails, mark images readable or flag a retake, and add optional solar/obstruction notes.
-7. Finish to view **Ready for Base team review.** or **A few more photos would help.** These are local demo summaries, not a submission to Base. Samples remain conspicuously labeled and cannot represent the homeowner's actual property.
+3. **Whole meter wall:** follow the live instruction (phone sideways, step back, hold steady) and take the photo. The app finds the meter, asks "Is this your electric meter?" (or asks you to tap it), then accepts or rejects the photo (see [Whole meter wall check](#whole-meter-wall-check)).
+4. Other photos: capture one still photo at a time, choose a local image, or select **Use sample photo**. No video is recorded. Confirm readability manually; retake any uncertain image.
+5. Answer the fence question. “Yes” adds the behind-fence photo; “no” removes it; “not sure” leaves the final summary incomplete until resolved. Select the breaker location, including “not sure” if needed.
+6. The rating step includes a safe skip option. Skipping never creates a completed photo.
+7. Review thumbnails, mark images readable or flag a retake, and add optional solar/obstruction notes.
+8. Finish to view **Ready for Base team review.** or **A few more photos would help.** These are local demo summaries, not a submission to Base. Samples remain conspicuously labeled and cannot represent the homeowner's actual property.
 
 The welcome-screen 5–10-minute duration is an illustrative estimate for the demo, not a Base-published service promise.
 
@@ -113,6 +114,38 @@ Base's guide asks for a close-up where "the meter number … is legible", in day
 - Browsers give little control over focus. "Tap to focus" isn't available, so the blur guidance asks the customer to hold steady or step back.
 - Uploaded photos skip live guidance and get the final check on the whole image.
 
+## Whole meter wall check
+
+Base's guide: "From as far back as possible (at least 10 steps), take a photo of the wall surrounding your meter." Base uses it to plan where the 3 ft × 3 ft battery can go (within 20 ft of the meter, against the wall, on the ground, clear of windows, meters and gas meters).
+
+**Live guidance** (`src/lib/wall/assess.ts` → `guideWall`): one instruction at a time. It asks the customer to turn the phone sideways, get more light, step back if the scene looks like a close-up of the meter, move outside if it looks like a room, and hold steady. The frame turns green when it's ready. The customer presses the shutter; nothing is auto-captured, because the app can't yet see where the meter is while framing.
+
+**After capture** (`src/lib/wall/locate.ts`):
+
+1. **Find the meter.** OpenCV's Hough circle transform finds round shapes (meter glass covers) at two box-filtered sizes. CLIP scores a crop around each: electric meter, or something else (AC unit, window, light, hose reel…).
+2. **Confirm with the customer.** The best candidate is circled: "Is this your electric meter?" If it's wrong, or nothing was found, they **tap the meter in the photo**. A tap snaps to a nearby circle when there is one, so the meter's size is still measured. Keyboard users can move a marker with the arrow keys and press Enter. "My meter isn't in this photo" is also an answer.
+3. **Accept or reject** (`decideWall`) with the reason and how to fix it:
+
+| Check | Rule (`src/lib/wall/criteria.ts`) | Rejection message (abridged) |
+| --- | --- | --- |
+| Outside wall of your home | CLIP scene "house wall" ≥ 0.5 (skipped if the classifier isn't available) | "This photo needs to be taken outside…" |
+| Meter in the photo | Customer confirmed or tapped the meter | "We need your electric meter in this photo…" |
+| Taken from far enough back | Meter cover diameter ≤ 12 % of photo height, and the scene isn't a meter close-up | "You're too close… step back at least 10 steps" |
+| Wall visible on both sides | Meter centre ≥ 20 % from each side edge; if the size is known, ≥ 3 ft of wall each side | "Include more of the wall to the left/right…" |
+| Ground visible below the meter | If the size is known, ≥ 3.5 ft of photo below the meter centre; otherwise meter in the top 70 % | "Include the ground below the meter…" |
+| Phone held sideways | Landscape photo | "Turn your phone sideways…" |
+| Enough light / In focus | Same measures as the meter step | "It's too dark…" / "The photo is blurry…" |
+
+**Distance estimates** use the meter's glass cover (about 7 in across on US socket meters) as a ruler. For example: "About 6 ft of wall shows left of the meter and 7 ft to the right." That's roughly ±30 %, so it's shown as an estimate and saved with the photo for Base's reviewers, and only a very short side (< 3 ft) is rejected.
+
+**Testing:** `?scene=house_wall|meter_closeup|indoors|other|off` fakes the scene classifier; `?debug=1` shows candidates, scores and estimates. `src/lib/wall/circles.test.ts` checks the circle search against Base's guide photos in `eval/wall`.
+
+**Known limits:**
+
+- CLIP prompts and thresholds are untested on real photos (Hugging Face was unreachable from the build environment). With the classifier unavailable, the strongest circle is offered and the customer confirms or taps it.
+- Meters without a round cover, very distant meters (cover under ~1 % of the photo height), or meters in deep shade may not be found automatically; the tap covers these.
+- The app doesn't check that the photo is the *meter's* wall versus another wall; the confirmed meter is the evidence.
+
 ## Optional measurements: demo-only and unverified
 
 This is separate from required photos and never affects completion or eligibility.
@@ -152,6 +185,8 @@ Icons: Lucide (ISC). PaddleOCR models via `@gutenye/ocr-models` / `@gutenye/ocr-
 - `src/components/Welcome.tsx`: introduction and explicit start action.
 - `src/components/GuidedCapture.tsx`: camera, upload, samples, drafts, confirmation, safety, and conditional fence prompt.
 - `src/components/MeterCapture.tsx`: the meter step — live guidance overlay, auto-capture, accept/reject result.
+- `src/components/WallCapture.tsx`: the whole-meter-wall step — live guidance, meter confirm/tap, accept/reject result.
+- `src/lib/wall/`: `criteria.ts` (rules, prompts, copy), `assess.ts` (live instruction and decision), `circles.ts` (OpenCV meter-cover search), `locate.ts` (photo pipeline).
 - `src/lib/meter/`: meter photo check — `criteria.ts` (rules and copy), `guidance.ts` (live instruction), `acceptance.ts` (accept/reject), `number.ts` (pick the meter number from OCR lines), `image.ts` / `metrics.ts` (image measurements), `frames.ts` (camera/photo plumbing), `analyzer.ts` + `analyzer.worker.ts` + `clip.ts` (on-device models).
 - `scripts/eval-meter.ts`: runs the meter check in Node against labeled photos.
 - `src/components/PhotoChecklist.tsx`: capture progress and navigation.
