@@ -1,0 +1,86 @@
+{
+  "good_original.jpg": {
+    "expect": "pass",
+    "why": "Base guide sample",
+    "number": "149 214 094"
+  },
+  "good_rotated.jpg": {
+    "expect": "pass",
+    "why": "slight tilt, still readable",
+    "number": "149 214 094"
+  },
+  "good_crop.jpg": {
+    "expect": "pass",
+    "why": "tight crop on nameplate",
+    "number": "149 214 094"
+  },
+  "bad_blur.jpg": {
+    "expect": "retake",
+    "why": "heavy blur"
+  },
+  "bad_dark.jpg": {
+    "expect": "retake",
+    "why": "underexposed"
+  },
+  "bad_glare.jpg": {
+    "expect": "retake",
+    "why": "specular glare over number"
+  },
+  "bad_cutoff.jpg": {
+    "expect": "retake",
+    "why": "number cropped at the bottom edge"
+  },
+  "bad_obstructed.jpg": {
+    "expect": "retake",
+    "why": "leaf/hand-sized block over first digits"
+  },
+  "bad_too_far.jpg": {
+    "expect": "retake",
+    "why": "meter tiny in frame"
+  },
+  "not_meter_breaker.jpg": {
+    "expect": "not_meter",
+    "why": "breaker panel, not a meter"
+  },
+  "not_meter_rating.jpg": {
+    "expect": "not_meter",
+    "why": "main disconnect rating, not a meter"
+  },
+  "bad_wall_shot.jpg": {
+    "expect": "retake",
+    "why": "wide wall shot; meter number unreadable"
+  },
+  "good_soft_focus.jpg": {
+    "expect": "pass",
+    "why": "slight softness",
+    "number": "149 214 094"
+  },
+  "good_dim.jpg": {
+    "expect": "pass",
+    "why": "overcast / dim",
+    "number": "149 214 094"
+  },
+  "good_small_lowq.jpg": {
+    "expect": "pass",
+    "why": "downscaled, heavy JPEG compression",
+    "number": "149 214 094"
+  },
+  "good_perspective.jpg": {
+    "expect": "pass",
+    "why": "mild perspective",
+    "number": "149 214 094"
+  },
+  "bad_last_digits_hidden.jpg": {
+    "expect": "retake",
+    "why": "last digits covered: must not pass a truncated number"
+  },
+  "bad_medium_blur.jpg": {
+    "expect": "retake",
+    "why": "clearly out of focus"
+  },
+  "good_lcd_reading.jpg": {
+    "expect": "pass",
+    "number": "149 214 094",
+    "why": "LCD shows a big kWh reading; must still read the nameplate number, not the display"
+  }
+}
