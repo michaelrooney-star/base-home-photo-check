@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/ops", "destination": "/" },
+    { "source": "/ops/(.*)", "destination": "/" },
+    { "source": "/admin", "destination": "/" },
+    { "source": "/admin/(.*)", "destination": "/" }
+  ]
+}
