@@ -25,9 +25,12 @@ export const CRITERIA = {
   minLuma: 45,
   /** Share of blown-out pixels in the circle that counts as glare. */
   maxGlare: 0.025,
-  /** Laplacian variance (live crop, 256px) below which the preview is too blurry to bother reading. */
-  minLiveSharpness: 900,
-  /** Laplacian variance of the saved photo (OCR-sized, ≤960px) below which it is too blurry for Base's reviewers. */
+  /** Live preview focus is judged relative to the sharpest recent frame (works for phones and webcams alike)… */
+  minRelativeSharpness: 0.6,
+  /** …with a low absolute floor (Laplacian variance, 256px crop) so a camera that never focuses isn't "sharp". */
+  minLiveSharpness: 150,
+  /** Laplacian variance of the saved photo (OCR-sized, ≤960px) below which it is too blurry for Base's reviewers.
+   *  Only applied when the meter number could NOT be read: a confident read is the proof of legibility. */
   minSharpness: 40,
   /** Mean frame-to-frame change (0–255) above which we ask the customer to hold steady. */
   maxMotion: 6,

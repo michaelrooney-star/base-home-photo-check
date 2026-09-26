@@ -2,11 +2,13 @@
 //  • PaddleOCR (PP-OCRv4 text detection + recognition, ~16 MB, self-hosted) finds and reads text lines.
 //  • CLIP (Transformers.js, ~150 MB from Hugging Face on first use, then browser-cached) answers
 //    "is this an electric meter, a gas meter, a breaker panel…?" by comparing the image with text prompts.
+//  • An object detector (YOLOE-11M, ~21 MB, self-hosted) finds boxes, cabinets, AC units, doors and windows on the meter wall.
 // Photos never leave the device.
 import Ocr, { ImageRawBase, registerBackend, type Line } from '@gutenye/ocr-common';
 import { splitIntoLineImages } from '@gutenye/ocr-common/splitIntoLineImages';
 import { RawImage } from '@huggingface/transformers';
-import { env as ortEnv, InferenceSession } from 'onnxruntime-web/webgpu';
+import { env as ortEnv, InferenceSession, Tensor } from 'onnxruntime-web/webgpu';
+import { DETECTOR_SIZE, toTensor, type Letterbox } from '../wall/objects.ts';
 import { loadClip, type Clip } from './clip.ts';
 
 /** PaddleOCR's image adapter, rebuilt on OffscreenCanvas so it works inside a worker. */
@@ -34,10 +36,12 @@ const FileUtils = { async read(url: string) { return (await fetch(url)).text(); 
 
 type InitMsg = { type: 'init'; ortBase: string; paddleBase: string; clipModel: string | null; prompts: string[] };
 type ClassifyMsg = { type: 'classify'; id: number; images: { width: number; height: number; data: Uint8ClampedArray }[] };
+type DetectMsg = { type: 'detect'; id: number; modelUrl: string; lb: Letterbox; data: Uint8ClampedArray } | { type: 'detect-init'; modelUrl: string };
 type AnalyzeMsg = { type: 'analyze'; id: number; width: number; height: number; data: Uint8ClampedArray; subject?: { width: number; height: number; data: Uint8ClampedArray } };
 
 let ocr: Promise<Ocr> | null = null;
 let clip: Promise<Clip> | null = null;
+let detector: Promise<InferenceSession> | null = null;
 let queue: Promise<unknown> = Promise.resolve(); // one inference at a time
 
 function init(m: InitMsg) {
@@ -79,9 +83,27 @@ async function classify(m: ClassifyMsg) {
   } catch (e) { return { type: 'classified', id: m.id, error: String((e as Error)?.message ?? e) }; }
 }
 
-self.onmessage = (e: MessageEvent<InitMsg | AnalyzeMsg | ClassifyMsg>) => {
+const loadDetector = (url: string) => {
+  detector ??= InferenceSession.create(url, { executionProviders: ['wasm'] });
+  detector.catch(() => { detector = null; });
+  return detector;
+};
+
+/** Object detection on a letterboxed photo; returns the raw output for decoding on the main thread (wall/objects.ts). */
+async function detect(m: Extract<DetectMsg, { type: 'detect' }>) {
+  try {
+    const s = await loadDetector(m.modelUrl);
+    const out = await s.run({ [s.inputNames[0]]: new Tensor('float32', toTensor(m.data, m.lb), [1, 3, DETECTOR_SIZE, DETECTOR_SIZE]) });
+    const o = out[s.outputNames[0]];
+    return { type: 'detected', id: m.id, output: o.data as Float32Array, anchors: o.dims[2] };
+  } catch (e) { return { type: 'detected', id: m.id, error: String((e as Error)?.message ?? e) }; }
+}
+
+self.onmessage = (e: MessageEvent<InitMsg | AnalyzeMsg | ClassifyMsg | DetectMsg>) => {
   const m = e.data;
   if (m.type === 'init') { init(m); return; }
+  if (m.type === 'detect-init') { void loadDetector(m.modelUrl).catch(err => console.warn('[wall] object detector failed to load', err)); return; }
+  if (m.type === 'detect') { queue = queue.then(() => detect(m)).then(r => self.postMessage(r)); return; }
   if (m.type === 'classify') { queue = queue.then(() => classify(m)).then(r => self.postMessage(r)); return; }
   queue = queue.then(() => analyze(m)).then(r => self.postMessage(r), err => self.postMessage({ type: 'result', id: m.id, ocrError: String(err) }));
 };

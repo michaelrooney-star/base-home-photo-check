@@ -1,4 +1,5 @@
-// "Whole meter wall" photo: acceptance rules, prompts and every message the customer sees, in one place.
+// Meter-wall photos (the whole wall, then the areas to its right and left): acceptance rules, prompts and every
+// message the customer sees, in one place.
 // Base's guide: "From as far back as possible (at least 10 steps), take a photo of the wall surrounding your meter."
 // Base uses it to plan where a 3 ft × 3 ft battery can go: within 20 ft of the meter, against the wall, on the ground,
 // not in front of windows / meters / breaker boxes, 3 ft from gas meters, with clear space in front of the meter.
@@ -39,34 +40,48 @@ export const WALL_CRITERIA = {
   minMeterCandidate: 0.5,
   /** Typical glass-cover diameter of a US socket meter, inches. Used only to estimate distances. */
   meterCoverInches: 7,
-  /** Meter cover diameter as a share of photo height above which the photo is too close ("10 steps back"). */
+  /**
+   * Meter cover diameter as a share of photo height above which the photo looks too close ("10 steps back").
+   * A stand-in only: if the photo still shows the meter, enough wall beside it and the ground, it passes anyway.
+   */
   maxMeterSize: 0.12,
   /** Meter centre must be at least this share of the photo width from each side edge. */
   minSideMargin: 0.2,
+  /** Side photos: the meter should be on the near half of the frame (right-side photo: left ≤ 60 %; left-side: mirror)… */
+  maxSideMeterX: 0.6,
+  /** …and past this it's the wrong side altogether. */
+  wrongSideMeterX: 0.75,
   /** When the scale is known: minimum wall visible on each side of the meter, feet. */
   minSideFeet: 3,
-  /** When the scale is known: ground must be at least this far below the meter centre to be in frame, feet. */
-  minBelowFeet: 3.5,
+  /** When the scale is known: ground must be at least this far below the meter centre to be in frame, feet (meters sit ~4–5 ft up; this leaves margin for the estimate). */
+  minBelowFeet: 2.5,
   /** When the scale isn't known: meter centre must be above this share of photo height (ground below it). */
   maxMeterY: 0.7,
   minLuma: 45,
-  /** Laplacian variance of the contrast-stretched photo (≤960px). */
-  minSharpness: 40,
+  /** Laplacian variance of the contrast-stretched photo (≤1200px). Wide shots have no small text, so this is lenient. */
+  minSharpness: 15,
   /** Live preview: consecutive steady, sharp, well-lit frames before we say "take the photo". */
   readyFrames: 6,
-  minLiveSharpness: 900,
+  /** Live focus: relative to the sharpest recent frame, with a low absolute floor (see the meter criteria). */
+  minRelativeSharpness: 0.6,
+  minLiveSharpness: 150,
   maxMotion: 6,
   freshMs: 3000,
   rejectionsBeforeOverride: 2,
 };
 
-export type WallCheckId = 'scene' | 'meter' | 'distance' | 'sides' | 'ground' | 'orientation' | 'light' | 'focus';
+/** The three meter-wall photos Base asks for, taken one after another. */
+export type WallMode = 'wall' | 'right' | 'left';
+export const WALL_SEQUENCE: WallMode[] = ['wall', 'right', 'left'];
+
+export type WallCheckId = 'scene' | 'meter' | 'distance' | 'sides' | 'direction' | 'ground' | 'orientation' | 'light' | 'focus';
 export const WALL_CHECK_LABELS: Record<WallCheckId, string> = {
   scene: 'Outside wall of your home',
   meter: 'Meter in the photo',
   distance: 'Taken from far enough back',
   sides: 'Wall visible on both sides of the meter',
-  ground: 'Ground visible below the meter',
+  direction: 'Shows the area beside the meter',
+  ground: 'Ground in front of the wall',
   orientation: 'Phone held sideways',
   light: 'Enough light',
   focus: 'In focus',
@@ -74,20 +89,62 @@ export const WALL_CHECK_LABELS: Record<WallCheckId, string> = {
 
 export const WALL_MESSAGES = {
   loading: 'Getting ready…',
-  point: 'Point your camera at the wall with your electric meter.',
-  closeup: 'You’re too close. Step back at least 10 steps so the whole wall fits in the photo.',
-  indoors: 'This photo needs to be taken outside, of the wall with your electric meter.',
-  other: 'We can’t see the wall of your home. Point your camera at the wall with your electric meter.',
-  landscape: 'Turn your phone sideways to fit more of the wall.',
-  dark: 'It’s too dark. Try again in daylight.',
+  point: 'Point at the wall with your meter.',
+  closeup: 'Too close — step back so the whole wall fits.',
+  indoors: 'Go outside to the wall with your meter.',
+  other: 'Point at the outside wall with your meter.',
+  landscape: 'Turn your phone sideways.',
+  dark: 'Too dark — try in daylight.',
   steady: 'Hold steady.',
-  blurry: 'The photo is blurry. Hold steady and give the camera a moment to focus.',
-  ready: 'Looks good — take the photo when the whole wall, the meter and the ground are in view.',
+  blurry: 'Blurry — hold steady a moment.',
+  ready: 'Looks good — take the photo.',
   // after capture
   noMeter: 'We need your electric meter in this photo. Step back and include the meter and the wall around it.',
-  tooClose: 'You’re too close to the meter. Step back at least 10 steps so we can see the wall around it.',
+  tooClose: 'You’re too close to the meter. Step back until the wall on both sides of the meter and the ground below it are in the photo.',
   moreLeft: 'Include more of the wall to the left of the meter — step back or move a little to the left.',
   moreRight: 'Include more of the wall to the right of the meter — step back or move a little to the right.',
-  ground: 'Include the ground below the meter — tilt the phone down a little or step back.',
+  ground: 'We can’t see the ground. Tilt your phone down or step back until the ground in front of the wall is in the photo — that’s where the battery would stand.',
   sceneUnverified: 'We couldn’t check the scene because photo recognition didn’t load.',
+  // side photos (right / left of the meter)
+  sidePoint: { right: 'Face along the wall to the right of your meter.', left: 'Face along the wall to the left of your meter.' },
+  sideReady: {
+    right: 'Looks good — take the photo.',
+    left: 'Looks good — take the photo.',
+  },
+  sideNoMeter: {
+    right: 'Keep your meter in the photo, near the left edge, so we can see where the area to its right begins.',
+    left: 'Keep your meter in the photo, near the right edge, so we can see where the area to its left begins.',
+  },
+  sideTooClose: {
+    right: 'You’re too close. Step back so we can see more of the wall and ground to the right of your meter.',
+    left: 'You’re too close. Step back so we can see more of the wall and ground to the left of your meter.',
+  },
+  wrongSide: {
+    right: 'This shows the area to the LEFT of your meter. Turn to face the area on its right side.',
+    left: 'This shows the area to the RIGHT of your meter. Turn to face the area on its left side.',
+  },
+  turnMore: {
+    right: 'Turn a little to the right, so the meter is on the left side of the photo and we can see the area beside it.',
+    left: 'Turn a little to the left, so the meter is on the right side of the photo and we can see the area beside it.',
+  },
 } as const;
+
+/** The one-line fix on the result card, for someone holding a phone with their hands full. */
+export type FixId = WallCheckId | 'wrongSide' | 'moreLeft' | 'moreRight';
+export function shortFix(id: FixId, mode: WallMode): string {
+  const side = mode === 'left' ? 'left' : 'right';
+  switch (id) {
+    case 'scene': return 'Point at the outside wall with your meter.';
+    case 'meter': return 'Include your meter in the photo.';
+    case 'orientation': return 'Turn your phone sideways.';
+    case 'light': return 'Too dark — try in daylight.';
+    case 'focus': return 'Blurry — hold steady and retake.';
+    case 'wrongSide': return `Wrong side — face the wall to the ${side} of the meter.`;
+    case 'distance': return 'Step back to show more wall.';
+    case 'moreLeft': return 'Show more wall on the left.';
+    case 'moreRight': return 'Show more wall on the right.';
+    case 'sides': return 'Show more wall beside the meter.';
+    case 'direction': return `Turn a little to the ${side}.`;
+    case 'ground': return 'Tilt down or step back to show the ground.';
+  }
+}

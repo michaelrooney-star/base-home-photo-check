@@ -5,7 +5,7 @@ import { CRITERIA, MESSAGES } from '../lib/meter/criteria';
 import { onModelStatus, prewarmAnalyzer, type ModelState } from '../lib/meter/analyzer';
 import { analyzeStill, coverRegion, grab, gray, readRegion, type Region, type StillAnalysis } from '../lib/meter/frames';
 import { frameIsGood, guide, type Guidance, type LiveInput } from '../lib/meter/guidance';
-import { FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
+import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
 import type { Gray } from '../lib/meter/image';
 import type { useCamera } from '../lib/useCamera';
 import type { Photo } from '../lib/photos';
@@ -92,10 +92,12 @@ export function MeterCapture({ camera, onAccept }: Props) {
     live.current = { fast: null, goodFrames: 0, subject: null, reading: null, prev: null, lastNumber: null };
     stableNumber.current = null;
     let iteration = 0;
+    const focus = createFocusTracker();
     const tick = setInterval(() => {
       const v = video.current, region = regionNow(); if (!v || !region) return;
       const small = gray(grab(v, region, FAST_SIZE));
       const m = fastMetrics(small, live.current.prev);
+      m.relSharpness = focus(performance.now(), m.sharpness);
       live.current.prev = small; live.current.fast = m;
       live.current.goodFrames = frameIsGood(m) ? live.current.goodFrames + 1 : 0;
       const g = guide({ ...live.current, now: performance.now() });
@@ -107,7 +109,7 @@ export function MeterCapture({ camera, onAccept }: Props) {
         const next = { ...g, message: sh.message };
         return prev && prev.message === next.message && prev.tone === next.tone && JSON.stringify(prev.checks) === JSON.stringify(next.checks) ? prev : next;
       });
-      if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), glare: m.glare.toFixed(3), motion: m.motion.toFixed(1), goodFrames: live.current.goodFrames }));
+      if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), relSharp: m.relSharpness.toFixed(2), glare: m.glare.toFixed(3), motion: m.motion.toFixed(1), goodFrames: live.current.goodFrames }));
       if (g.capture) capture();
     }, 125);
     (async () => {

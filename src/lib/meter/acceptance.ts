@@ -38,7 +38,7 @@ export function decide(e: PhotoEvidence): Decision {
     check('light', e.luma >= CRITERIA.minLuma, MESSAGES.dark),
     // Glare and softness only matter if they stop us reading the number.
     check('glare', readable || e.glare <= CRITERIA.maxGlare, MESSAGES.glare),
-    check('focus', e.sharpness >= CRITERIA.minSharpness, MESSAGES.blurry),
+    check('focus', readable || e.sharpness >= CRITERIA.minSharpness, MESSAGES.blurry),
     check('number', readable && digitPx >= CRITERIA.minDigitPx,
       !r.meter_number_visible ? MESSAGES.notFoundFinal : !r.all_characters_certain ? MESSAGES.uncertainFinal : MESSAGES.small),
     check('framing', r.number_fully_in_frame, MESSAGES.cutOff),

@@ -19,7 +19,10 @@ describe('decide (final accept/reject)', () => {
     expect(decide({ ...good, glare: 0.2 }).accepted).toBe(true);
     expect(failed({ ...good, glare: 0.2, reading: { ...readable, all_characters_certain: false } })).toEqual(['glare', 'number']);
   });
-  it('rejects blurry photos even when the number was read', () => { expect(failed({ ...good, sharpness: 5 })).toEqual(['focus']); });
+  it('lets a confident number read outweigh a soft photo, but rejects blur when the number is unreadable', () => {
+    expect(decide({ ...good, sharpness: 5 }).accepted).toBe(true);
+    expect(failed({ ...good, sharpness: 5, reading: { ...readable, all_characters_certain: false } })).toEqual(['focus', 'number']);
+  });
   it('rejects numbers too small to read reliably in the saved photo', () => { expect(failed({ ...good, regionHeightPx: 300 })).toEqual(['number']); });
   it('explains a missing number', () => { const d = decide({ ...good, reading: { ...readable, meter_number_visible: false, meter_number: '', all_characters_certain: false } }); expect(d.reasons[0]).toBe(MESSAGES.notFoundFinal); });
   it('rejects cut-off and covered numbers', () => { expect(failed({ ...good, reading: { ...readable, number_fully_in_frame: false, issues: ['obstructed'] } })).toEqual(['framing', 'clear']);
@@ -27,7 +30,7 @@ describe('decide (final accept/reject)', () => {
 });
 
 describe('guide (live instructions)', () => {
-  const base: LiveInput = { now: 10_000, fast: { luma: 180, sharpness: 4000, glare: 0, motion: 1 }, goodFrames: 10, subject: { result: electric, at: 9_500 }, reading: { obs: readable, at: 9_500, regionHeightPx: 1000 } };
+  const base: LiveInput = { now: 10_000, fast: { luma: 180, sharpness: 4000, relSharpness: 1, glare: 0, motion: 1 }, goodFrames: 10, subject: { result: electric, at: 9_500 }, reading: { obs: readable, at: 9_500, regionHeightPx: 1000 } };
   it('captures when everything is good', () => { expect(guide(base)).toMatchObject({ tone: 'ready', capture: true }); });
   it('waits for enough steady frames', () => { expect(guide({ ...base, goodFrames: 2 })).toMatchObject({ tone: 'hold', capture: false }); });
   it('gives one instruction, most important first', () => {
@@ -36,6 +39,11 @@ describe('guide (live instructions)', () => {
     expect(guide({ ...base, fast: { ...base.fast!, motion: 20 } }).message).toBe(MESSAGES.steady);
     expect(guide({ ...base, reading: { ...base.reading!, obs: { ...readable, meter_number_visible: false } } }).message).toBe(MESSAGES.notFound);
     expect(guide({ ...base, reading: { ...base.reading!, regionHeightPx: 300 } }).message).toBe(MESSAGES.small);
+  });
+  it('judges focus relative to the camera’s recent best (soft webcams still get ready)', () => {
+    expect(guide({ ...base, fast: { ...base.fast!, sharpness: 400, relSharpness: 0.95 } }).tone).toBe('ready');
+    expect(guide({ ...base, fast: { ...base.fast!, sharpness: 400, relSharpness: 0.3 } }).message).toBe(MESSAGES.blurry);
+    expect(guide({ ...base, fast: { ...base.fast!, sharpness: 60, relSharpness: 1 } }).message).toBe(MESSAGES.blurry);
   });
   it('does not capture on stale readings', () => { expect(guide({ ...base, now: 20_000 }).capture).toBe(false); });
   it('does not capture before the classifier has answered', () => { expect(guide({ ...base, subject: null }).capture).toBe(false); });

@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { Check, CircleAlert, CircleCheck, ImagePlus, Loader2, MapPin, RotateCcw, Send, Upload } from 'lucide-react';
-import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, type ModelState } from '../lib/meter/analyzer';
+import { Check, CircleAlert, CircleCheck, ImagePlus, Info, Loader2, MapPin, RotateCcw, Send, Upload } from 'lucide-react';
+import { classifyImages, mockScene, onModelStatus, prewarmAnalyzer, prewarmDetector, type ModelState } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
-import { FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
-import { guideWall, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
-import { WALL_CRITERIA, WALL_MESSAGES, type SceneClass } from '../lib/wall/criteria';
-import { analyzeWallPhoto, decide, spotFromTap, type WallAnalysis } from '../lib/wall/locate';
+import { createFocusTracker, FAST_SIZE, fastMetrics } from '../lib/meter/metrics';
+import { guideWall, spaceLimitedOnly, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
+import { shortFix, WALL_CRITERIA, WALL_MESSAGES, WALL_SEQUENCE, type SceneClass, type WallMode } from '../lib/wall/criteria';
+import { analyzeWallPhoto, decide, measureSpace, spotFromTap, withRuler, type WallAnalysis } from '../lib/wall/locate';
+import { customerSpaceText, type SpaceFinding } from '../lib/wall/space';
+import { cantSeePast, summarizeSpace } from '../lib/wall/survey';
 import type { useCamera } from '../lib/useCamera';
 import type { Photo } from '../lib/photos';
 
-type Props = { camera: ReturnType<typeof useCamera>; sample: string; onAccept: (p: Photo) => void };
+/** `done`: which of the three wall photos already have an accepted photo (for the progress strip). */
+type Props = { camera: ReturnType<typeof useCamera>; sample: string; mode: WallMode; done: Record<WallMode, boolean>; skipped?: WallMode[]; spotKnown?: boolean; onAccept: (p: Photo) => void };
+const MODE_LABEL: Record<WallMode, string> = { wall: 'Whole wall', right: 'Right of meter', left: 'Left of meter' };
+type Goal = { label: string; state: 'pass' | 'fail' | 'warn' | 'info'; detail?: string };
 type Still = { url: string; source: Photo['source'] };
 type Phase = 'live' | 'checking' | 'confirm' | 'tap' | 'result';
 const debug = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
@@ -22,13 +27,14 @@ function containRect(box: { w: number; h: number }, img: { w: number; h: number 
   return { x: (box.w - w) / 2, y: (box.h - h) / 2, w, h };
 }
 
-export function WallCapture({ camera, sample, onAccept }: Props) {
+export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnown = false, onAccept }: Props) {
   const [phase, setPhase] = useState<Phase>('live');
   const [still, setStill] = useState<Still | null>(null);
   const [analysis, setAnalysis] = useState<WallAnalysis | null>(null);
   const [spot, setSpot] = useState<MeterSpot | null>(null);
   const [cursor, setCursor] = useState({ x: 0.5, y: 0.5 });
   const [decision, setDecision] = useState<WallDecision | null>(null);
+  const [space, setSpace] = useState<SpaceFinding | null>(null);
   const [rejections, setRejections] = useState(0);
   const [guidance, setGuidance] = useState<WallGuidance | null>(null);
   const [error, setError] = useState('');
@@ -36,6 +42,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [models, setModels] = useState<{ subject: ModelState; error: string }>({ subject: 'loading', error: '' });
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown>>({});
+  const resultRef = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null), video = useRef<HTMLVideoElement>(null), file = useRef<HTMLInputElement>(null);
   const live = useRef<Omit<WallLive, 'now'> & { prev: Gray | null }>({ fast: null, goodFrames: 0, landscape: true, scene: null, prev: null });
   const run = useRef(0);
@@ -44,9 +51,12 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
 
   useEffect(() => {
     void prewarmAnalyzer().catch(() => undefined);
+    void prewarmDetector();
     const off = onModelStatus(s => setModels({ subject: s.subject, error: s.error }));
     return () => { off(); run.current++; const s = stillRef.current; if (s?.url.startsWith('blob:')) URL.revokeObjectURL(s.url); };
   }, []);
+  // Keep the verdict on screen: on a phone the card sits below the photo.
+  useEffect(() => { if (phase === 'result') resultRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, [phase, decision]);
   useLayoutEffect(() => {
     const el = frame.current; if (!el) return;
     const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
@@ -57,12 +67,14 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     if (video.current && phase === 'live') { video.current.srcObject = camera.stream; if (camera.stream) void video.current.play().catch(() => undefined); }
   }, [camera.stream, phase]);
 
-  const finish = useCallback((a: WallAnalysis, meter: MeterSpot | null) => {
-    const d = decide(a, meter);
-    setSpot(meter); setDecision(d); setPhase('result');
+  const finish = useCallback((a: WallAnalysis, picked: MeterSpot | null) => {
+    const meter = withRuler(a, picked);
+    const d = decide(a, meter, mode);
+    const f = meter ? measureSpace(a, meter, mode) : null;
+    setSpot(meter); setDecision(d); setSpace(f); setPhase('result');
     if (!d.accepted) setRejections(n => n + 1);
-    if (debug) setDebugInfo(i => ({ ...i, meter, estimate: d.estimate }));
-  }, []);
+    if (debug) setDebugInfo(i => ({ ...i, meter, estimate: d.estimate, space: f && { spot: f.spot, stretches: f.stretches.map(x => `${x.side} ${x.ft?.toFixed(1)} ft`), blockers: f.blockers.map(b => b.name) } }));
+  }, [mode]);
 
   const check = useCallback(async (s: Still) => {
     const id = ++run.current;
@@ -92,15 +104,17 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     if (phase !== 'live' || !camera.stream || !videoReady) return;
     const id = run.current; let alive = true;
     live.current = { fast: null, goodFrames: 0, landscape: true, scene: null, prev: null };
+    const focus = createFocusTracker();
     const tick = setInterval(() => {
       const v = video.current; if (!v || !v.videoWidth) return;
       const small = gray(grab(v, { x: 0, y: 0, w: v.videoWidth, h: v.videoHeight }, FAST_SIZE));
       const m = fastMetrics(small, live.current.prev);
+      m.relSharpness = focus(performance.now(), m.sharpness);
       live.current.prev = small; live.current.fast = m; live.current.landscape = v.videoWidth >= v.videoHeight;
-      live.current.goodFrames = m.luma >= WALL_CRITERIA.minLuma && m.sharpness >= WALL_CRITERIA.minLiveSharpness && m.motion <= WALL_CRITERIA.maxMotion ? live.current.goodFrames + 1 : 0;
-      const g = guideWall({ ...live.current, now: performance.now() });
+      live.current.goodFrames = m.luma >= WALL_CRITERIA.minLuma && wallInFocus(m) && m.motion <= WALL_CRITERIA.maxMotion ? live.current.goodFrames + 1 : 0;
+      const g = guideWall({ ...live.current, mode, now: performance.now() });
       setGuidance(prev => (prev && prev.message === g.message && prev.tone === g.tone && JSON.stringify(prev.checks) === JSON.stringify(g.checks) ? prev : g));
-      if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), motion: m.motion.toFixed(1) }));
+      if (debug) setDebugInfo(d => ({ ...d, luma: m.luma.toFixed(0), sharp: m.sharpness.toFixed(0), relSharp: m.relSharpness.toFixed(2), motion: m.motion.toFixed(1) }));
     }, 125);
     (async () => {
       while (alive && id === run.current) {
@@ -114,7 +128,7 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
       }
     })();
     return () => { alive = false; clearInterval(tick); };
-  }, [phase, camera.stream, videoReady]);
+  }, [phase, camera.stream, videoReady, mode]);
 
   async function pick(x: number, y: number) {
     if (!analysis) return;
@@ -135,32 +149,57 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     if (moves[e.key]) { e.preventDefault(); setCursor(c => ({ x: Math.min(1, Math.max(0, c.x + moves[e.key][0])), y: Math.min(1, Math.max(0, c.y + moves[e.key][1])) })); }
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void pick(cursor.x, cursor.y); }
   }
-  function retake() { run.current++; setAnalysis(null); setDecision(null); setSpot(null); setOwnedStill(null); setGuidance(null); setPhase('live'); }
+  /** The customer can't step back further: accept on the other checks and flag it for Base's team. */
+  function cantStepBack() {
+    if (!analysis) return;
+    const d = decide(analysis, spot, mode, true);
+    setDecision(d);
+    if (debug) setDebugInfo(i => ({ ...i, limitedSpace: true }));
+  }
+  function retake() { run.current++; setAnalysis(null); setDecision(null); setSpace(null); setSpot(null); setOwnedStill(null); setGuidance(null); setPhase('live'); }
   function use(override = false) {
     if (!still || !decision) return;
     const s = still; stillRef.current = null; setStill(null);
     const est = decision.estimate;
-    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(est ? { details: `About ${Math.round(est.leftFt)} ft of wall visible left of the meter and ${Math.round(est.rightFt)} ft right (estimate)` } : {}) } });
+    const summary = space ? summarizeSpace(space) : undefined;
+    const details = [
+      decision.limitedSpace ? 'Limited space — customer couldn’t step back further.' : null,
+      summary?.text ?? null,
+      est && mode === 'wall' ? `Photo shows about ${Math.round(est.leftFt)} ft left of the meter and ${Math.round(est.rightFt)} ft right (frame width, estimate).` : null,
+    ].filter(Boolean).join(' ');
+    onAccept({ url: s.url, source: s.source, status: 'confirmed', warnings: [], check: { accepted: decision.accepted, meterNumber: null, reasons: decision.reasons, override, ...(decision.limitedSpace ? { limitedSpace: true } : {}), ...(summary ? { space: summary } : {}), ...(details ? { details } : {}) } });
   }
 
   const tone = guidance?.tone ?? 'search';
   const photoRect = analysis && size.w ? containRect(size, { w: analysis.img.naturalWidth, h: analysis.img.naturalHeight }) : null;
   const ring = (s: { x: number; y: number; r: number | null } | null, cls: string) => s && photoRect &&
     <span className={`meter-pin ${cls}`} style={{ left: photoRect.x + s.x * photoRect.w, top: photoRect.y + s.y * photoRect.h, width: Math.max(36, (s.r ?? 0.03) * 2.6 * photoRect.h), height: Math.max(36, (s.r ?? 0.03) * 2.6 * photoRect.h) }} aria-hidden="true" />;
-  const d = decision, est = d?.estimate;
+  const d = decision;
+  const seePast = d?.accepted && space && !spotKnown ? cantSeePast(space) : null;
 
   return <>
+    <ol className="wall-steps" aria-label="Meter wall photos">
+      {WALL_SEQUENCE.map((m, i) => <li key={m} className={m === mode ? 'current' : done[m] ? 'done' : skipped.includes(m) ? 'skipped' : ''} aria-current={m === mode ? 'step' : undefined}>
+        <b>{done[m] && m !== mode ? <Check size={12} /> : i + 1}</b>{MODE_LABEL[m]}{skipped.includes(m) && !done[m] && m !== mode && <small> · not needed</small>}</li>)}
+    </ol>
     <div ref={frame} className={`camera-frame wall-frame ${phase !== 'live' ? 'has-photo' : ''} ${phase === 'tap' ? 'tapping' : ''} ${tone === 'ready' && phase === 'live' ? 'ready' : ''}`}
       onPointerUp={onTap} onKeyDown={onKey} tabIndex={phase === 'tap' ? 0 : -1} role={phase === 'tap' ? 'application' : undefined}
       aria-label={phase === 'tap' ? 'Photo: tap your meter, or use the arrow keys to move the marker and press Enter' : undefined}>
       {phase !== 'live' && still ? <>
-        <img src={still.url} alt={still.source === 'sample' ? 'Meter wall — Base guide sample' : 'Your meter wall photo'} draggable={false} />
+        <img src={still.url} alt={`${MODE_LABEL[mode]} — ${still.source === 'sample' ? 'Base guide sample' : 'your photo'}`} draggable={false} />
         {phase === 'confirm' && ring(spot, 'proposed')}
         {phase === 'tap' && ring({ ...cursor, r: null }, 'cursor')}
         {phase === 'result' && ring(spot, d?.accepted ? 'good' : 'placed')}
+        {phase === 'result' && photoRect && d?.checks.some(c => c.id === 'ground' && c.state === 'fail') && <div className="ground-missing" aria-hidden="true" style={{ left: photoRect.x, width: photoRect.w, top: photoRect.y + photoRect.h - 64 }}><span>↓ Ground not in the photo</span></div>}
+        {phase === 'result' && space && spot && photoRect && <div className="space-strip" aria-hidden="true" style={{ left: photoRect.x, width: photoRect.w, top: photoRect.y + photoRect.h - 30 }}>
+          {space.blockers.filter(b => b.kind !== 'meter' && space.sides.includes(b.x1 <= spot!.x ? 'left' : 'right')).map((b, i) => <span key={i} className="space-block" style={{ left: `${b.x0 * 100}%`, width: `${(b.x1 - b.x0) * 100}%` }}>{(b.x1 - b.x0) * photoRect.w >= b.name.length * 7 + 12 && <em>{b.name}</em>}</span>)}
+          {space.spot && <span className="space-open" style={{ left: `${space.spot.x0 * 100}%`, width: `${(space.spot.x1 - space.spot.x0) * 100}%` }}><em>open wall</em></span>}
+        </div>}
       </> : camera.stream ? <>
         <video ref={video} autoPlay playsInline muted onLoadedData={() => setVideoReady(true)} aria-label="Live camera preview" />
         <div className="wall-guide" aria-hidden="true"><i /><i /><i /><i /><span>Keep the ground in view</span></div>
+        {mode !== 'wall' && <div className={`meter-zone ${mode}`} aria-hidden="true"><span>Meter here</span></div>}
+        {camera.canWiden && <button className="lens-toggle" aria-pressed={camera.wide} aria-label={camera.wide ? 'Switch back to the normal lens' : 'Switch to the wide lens to fit more in'} onClick={() => void camera.setWide(!camera.wide)}>{camera.wide ? '1×' : '0.5×'}</button>}
         <div className={`guide-message ${tone}`} role="status" aria-live="polite">{tone === 'ready' ? <CircleCheck size={17} /> : null}{guidance?.message ?? WALL_MESSAGES.loading}</div>
         <button className="shutter" aria-label="Take photo" disabled={!videoReady} onClick={capture}><span /></button>
       </> : <div className="camera-empty"><h3>{camera.status === 'requesting' ? 'Allow your camera to get started' : 'Turn on your camera'}</h3><p>{camera.status === 'unavailable' ? 'Your camera isn’t available. You can upload a photo instead.' : 'We’ll guide you to a photo Base can use.'}</p><button className="button" onClick={() => void camera.start()} disabled={camera.status === 'requesting'}>Use camera</button></div>}
@@ -168,8 +207,13 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
     </div>
 
     {phase === 'live' && <>
+      <div className="photo-goals">
+        <span>Looking for</span>
+        <ul>{(mode === 'wall' ? ['Meter', 'Wall on both sides', 'Ground', '3 ft of open wall'] : ['Meter', `Wall to the ${mode}`, 'Ground', '3 ft of open wall']).map(t => <li key={t}>{t}</li>)}</ul>
+        <p>Step back as far as you safely can{camera.canWiden ? <>; try <b>0.5×</b> if the wall doesn’t fit</> : ''}.</p>
+      </div>
       <ul className="live-checks" aria-label="Photo requirements">{(guidance?.checks ?? []).map(c => <Chip key={c.id} c={c} />)}</ul>
-      <p className="model-status">{models.subject === 'failed' ? <>Photo recognition didn’t load{debug ? `: ${models.error}` : ''}. You can still take the photo; we’ll ask you to point out the meter.</> : models.subject !== 'ready' ? <><Loader2 size={12} className="spin" /> Loading on-device photo recognition… (first time only)</> : <>Take the photo when the whole wall, the meter and the ground are in view. Checked on this device.</>}</p>
+      <p className="model-status">{models.subject === 'failed' ? <>Photo recognition didn’t load{debug ? `: ${models.error}` : ''}. You can still take the photo; we’ll ask you to point out the meter.</> : models.subject !== 'ready' ? <><Loader2 size={12} className="spin" /> Loading on-device photo recognition… (first time only)</> : <>Photos are checked on this device.</>}</p>
       {error && <p className="inline-error">{error}</p>}
       <div className="capture-fallbacks">
         <button className="button" onClick={() => file.current?.click()}><Upload size={17} /> Upload photo</button>
@@ -195,19 +239,54 @@ export function WallCapture({ camera, sample, onAccept }: Props) {
       </div>
     </div>}
 
-    {phase === 'result' && d && <div className={`meter-result ${d.accepted ? 'accepted' : 'rejected'}`}>
-      <div className="meter-result-head">{d.accepted ? <CircleCheck size={26} /> : <CircleAlert size={26} />}<div>
-        <h3>{d.accepted ? 'Photo accepted' : 'Photo not accepted'}</h3>
-        <p>{d.accepted ? (est ? <>About <strong>{Math.round(est.leftFt)} ft</strong> of wall shows left of the meter and <strong>{Math.round(est.rightFt)} ft</strong> to the right (rough estimate).</> : 'The meter, the wall around it and the ground are in view.') : d.reasons[0]}</p>
-      </div></div>
-      <ul className="result-checks">{d.checks.filter(c => c.state !== 'skipped').map(c => <li key={c.id} className={c.state}>{c.state === 'pass' ? <Check size={15} /> : <CircleAlert size={15} />}<span><b>{c.label}</b>{c.state === 'fail' && c.message && c.message !== d.reasons[0] && <small>{c.message}</small>}</span></li>)}</ul>
-      {still?.source === 'sample' && <p className="sample-disclaimer">Example from Base’s photo guide. This isn’t a photo of your home.</p>}
-      <div className="confirm-actions">
-        {d.accepted ? <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" onClick={() => use()}><Check size={17} /> Use this photo</button></>
-          : <><button className="button" onClick={() => { setCursor(spot ? { x: spot.x, y: spot.y } : { x: 0.5, y: 0.5 }); setPhase('tap'); }}><MapPin size={16} /> Point to the meter again</button><button className="button primary" onClick={retake}><RotateCcw size={16} /> Retake photo</button></>}
-      </div>
-      {!d.accepted && rejections >= WALL_CRITERIA.rejectionsBeforeOverride && <button className="text-button override-link" onClick={() => use(true)}><Send size={14} /> Still stuck? Send this photo anyway and Base’s team will review it.</button>}
-    </div>}
+    {phase === 'result' && d && (() => {
+      const failedId = (id: string) => d.checks.some(c => c.id === id && c.state === 'fail');
+      const other = mode === 'right' ? 'left' : 'right';
+      const qualityFail = d.checks.find(c => (c.id === 'light' || c.id === 'focus' || c.id === 'orientation' || c.id === 'scene') && c.state === 'fail');
+      const openWall: Goal | null = !space ? null
+        : space.spot ? { label: 'Open wall', state: 'pass', detail: `About ${Math.round(space.spot.ft!)}${space.spot.open ? '+' : ''} ft of bare wall to the ${space.spot.side} of the meter.` }
+        : spotKnown && mode !== 'wall' ? { label: 'Open wall', state: 'pass', detail: 'Already found in your whole-wall photo.' }
+        : { label: 'Open wall', state: mode === 'wall' ? 'info' : 'warn', detail: customerSpaceText(space) };
+      const goals: Goal[] = [
+        { label: 'Meter', state: failedId('meter') ? 'fail' : 'pass' },
+        { label: 'Wall', state: failedId('distance') || failedId('sides') || failedId('direction') ? (d.limitedSpace ? 'info' : 'fail') : 'pass', detail: d.limitedSpace ? 'You couldn’t step back further — noted for Base’s team.' : undefined },
+        { label: 'Ground', state: failedId('ground') ? 'fail' : 'pass', detail: failedId('ground') ? 'The bottom of the photo still shows wall.' : undefined },
+        ...(openWall ? [openWall] : []),
+        ...(qualityFail ? [{ label: 'Clear photo', state: 'fail' as const, detail: qualityFail.message }] : []),
+      ];
+      const improve = d.accepted && !!seePast && !d.limitedSpace;
+      const blocker = space?.nearest[mode === 'left' ? 'left' : 'right']?.name;
+      const lens = camera.canWiden && !camera.wide ? ' Or tap 0.5×.' : '';
+      const line = !d.accepted ? (d.primary ? shortFix(d.primary, mode) : d.reasons[0]) + (spaceLimitedOnly(d) ? lens : '')
+        : d.limitedSpace ? 'Noted: you couldn’t step back further.'
+        : improve ? `Step back to see past the ${blocker ?? 'meter'}.${lens}`
+        : space?.spot ? `About ${Math.round(space.spot.ft!)}${space.spot.open ? '+' : ''} ft of open wall on the ${space.spot.side}.`
+        : mode === 'wall' && space ? 'Crowded near the meter — we’ll look along the wall next.'
+        : spotKnown && mode !== 'wall' ? 'This shows the ground in front of the open wall.'
+        : null;
+      return <div ref={resultRef} className={`meter-result compact ${d.accepted ? (improve ? 'improve' : 'accepted') : 'rejected'}`}>
+        <div className="result-line">{d.accepted && !improve ? <CircleCheck size={22} /> : <CircleAlert size={22} />}
+          <h3>{!d.accepted ? 'Retake needed' : d.limitedSpace ? 'Accepted with a note' : improve ? 'Accepted — can you show more wall?' : 'Photo accepted'}</h3></div>
+        {line && <p className="fix-line">{line}</p>}
+        <ul className="goal-chips" aria-label="What we found">{goals.map(g => <li key={g.label} className={g.state}>
+          {g.state === 'pass' ? <Check size={13} /> : g.state === 'info' ? <Info size={13} /> : <CircleAlert size={13} />}{g.label}</li>)}</ul>
+        {still?.source === 'sample' && <p className="sample-disclaimer">Example from Base’s photo guide — not your home.</p>}
+        <div className="confirm-actions">
+          {!d.accepted ? <><button className="button" onClick={() => { setCursor(spot ? { x: spot.x, y: spot.y } : { x: 0.5, y: 0.5 }); setPhase('tap'); }}><MapPin size={16} /> Not my meter</button><button className="button primary" onClick={retake}><RotateCcw size={16} /> Retake</button></>
+            : improve ? <><button className="button" onClick={() => use()}><Check size={16} /> Use it</button><button className="button primary" onClick={retake}><RotateCcw size={17} /> Retake</button></>
+            : <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" onClick={() => use()}><Check size={17} /> Use this photo</button></>}
+        </div>
+        {!d.accepted && spaceLimitedOnly(d) && <button className="text-button cant-step" onClick={cantStepBack}>I can’t step back any further</button>}
+        {!d.accepted && rejections >= WALL_CRITERIA.rejectionsBeforeOverride && !spaceLimitedOnly(d) && <button className="text-button override-link" onClick={() => use(true)}><Send size={14} /> Still stuck? Send it for Base’s team to review.</button>}
+        <details className="all-checks"><summary>Details</summary>
+          <p className="purpose">{mode === 'wall' ? 'We look for your meter, the wall around it, the ground, and open wall where a 3 ft wide battery could stand.' : `We look along the wall to the ${mode} for 3 ft of open wall with nothing on it, and the ground in front of it.`}</p>
+          <ul className="goal-list">{goals.filter(g => g.detail).map(g => <li key={g.label} className={g.state}><span><b>{g.label}</b><small>{g.detail}</small></span></li>)}</ul>
+          {!d.accepted && d.reasons[0] && <p className="purpose">{d.reasons[0]}</p>}
+          {improve && <p className="purpose">{seePast} If you can’t, use this photo and we’ll check the {other} side next.</p>}
+          <ul className="result-checks">{d.checks.filter(c => c.state !== 'skipped').map(c => <li key={c.id} className={c.state}>{c.state === 'pass' ? <Check size={15} /> : <CircleAlert size={15} />}<span><b>{c.label}</b></span></li>)}</ul>
+        </details>
+      </div>;
+    })()}
 
     {debug && <pre className="meter-debug">{JSON.stringify({ phase, models, ...debugInfo }, null, 1)}</pre>}
     <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="sr-only" tabIndex={-1} aria-label="Choose a photo from your device"

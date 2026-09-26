@@ -1,10 +1,13 @@
 // Browser pipeline for a captured / uploaded whole-wall photo: scene check, meter search, and final decision.
-import { classifyImages, mockScene, onModelStatus, waitForSubject } from '../meter/analyzer.ts';
-import { grab } from '../meter/frames.ts';
+import { classifyImages, detectObjects, mockScene, onModelStatus, waitForSubject } from '../meter/analyzer.ts';
+import { grab, grabExact } from '../meter/frames.ts';
 import { meanLuma, resizeRgba, sharpness, stretch, toGray } from '../meter/image.ts';
 import { decideWall, type MeterSpot, type SceneResult, type WallDecision } from './assess.ts';
 import { circleNear, findMeterCircles, loadCv, type Circle, type Rgba } from './circles.ts';
-import { WALL_CRITERIA, type CandidateClass, type SceneClass } from './criteria.ts';
+import { WALL_CRITERIA, type CandidateClass, type SceneClass, type WallMode } from './criteria.ts';
+import { decodeDetections, letterbox, type Detection } from './objects.ts';
+import { checkGround, type GroundCheck } from './ground.ts';
+import { checkRuler, findSpace, greenProfile, plantBand, type SpaceFinding } from './space.ts';
 
 export type Candidate = { circle: Circle; p: number | null };
 export type WallAnalysis = {
@@ -16,6 +19,8 @@ export type WallAnalysis = {
   proposal: (MeterSpot & { confident: boolean }) | null;
   luma: number;
   sharpness: number;
+  /** Boxes, cabinets, AC units, doors and windows; null if the detector is off or failed. */
+  detections: Detection[] | null;
 };
 
 let subjectFailed = false;
@@ -45,11 +50,19 @@ export async function analyzeWallPhoto(url: string): Promise<WallAnalysis> {
   const crops = found.map(c => grab(img, { x: Math.max(0, (c.x - c.r * 2.5 * full.h / full.w) * full.w), y: Math.max(0, (c.y - c.r * 2.5) * full.h), w: c.r * 5 * full.h, h: c.r * 5 * full.h }, 224));
   const scored = await classifyImages<CandidateClass>(crops, 'candidate');
   const candidates: Candidate[] = circles.map((circle, i) => ({ circle, p: scored ? scored[i].probs.electric_meter : null }));
+  // Objects on the wall: they help pick the meter and feed the clear-space check once the meter is confirmed.
+  const lb = letterbox(full.w, full.h);
+  const raw = await detectObjects(grabExact(img, full, lb.w, lb.h), lb).catch(() => null);
+  const detections = raw ? decodeDetections(raw.output, raw.anchors, lb, full.w, full.h) : null;
+  // A circle inside a detected meter, and the biggest one there (the glass cover, not a round digit), ranks first.
+  const meterBoxes = (detections ?? []).filter(d => d.kind === 'meter' && d.score >= 0.3);
+  const inMeter = (c: Candidate) => meterBoxes.some(d => c.circle.x / W >= d.x0 && c.circle.x / W <= d.x1 && c.circle.y / H >= d.y0 && c.circle.y / H <= d.y1);
+  const ranked = [...candidates].sort((a, b) => Number(inMeter(b)) - Number(inMeter(a)) || (inMeter(a) && inMeter(b) ? b.circle.r - a.circle.r : 0));
   const best = scored
-    ? [...candidates].filter(c => (c.p ?? 0) >= WALL_CRITERIA.minMeterCandidate).sort((a, b) => b.p! - a.p!)[0]
-    : candidates[0]; // classifier unavailable: offer the strongest circle, the customer confirms
+    ? ranked.filter(c => (c.p ?? 0) >= WALL_CRITERIA.minMeterCandidate).sort((a, b) => b.p! - a.p!)[0]
+    : ranked[0]; // classifier unavailable: offer the most plausible circle, the customer confirms
   const proposal = best ? { x: best.circle.x / W, y: best.circle.y / H, r: best.circle.r / H, source: 'auto' as const, confident: !!scored } : null;
-  return { img, rgba, scene, candidates, proposal, luma: meanLuma(g, inner), sharpness: sharpness(stretch(g), inner) };
+  return { img, rgba, scene, candidates, proposal, luma: meanLuma(g, inner), sharpness: sharpness(stretch(g), inner), detections };
 }
 
 /** Turns a tap (shares of photo width/height) into a meter spot, measuring the cover if a circle is there. */
@@ -59,5 +72,20 @@ export async function spotFromTap(a: WallAnalysis, x: number, y: number): Promis
   return { x, y, r, source: 'tap' };
 }
 
-export const decide = (a: WallAnalysis, meter: MeterSpot | null): WallDecision =>
-  decideWall({ scene: a.scene, meter, width: a.img.naturalWidth, height: a.img.naturalHeight, luma: a.luma, sharpness: a.sharpness });
+export const decide = (a: WallAnalysis, meter: MeterSpot | null, mode: WallMode = 'wall', limitedSpace = false): WallDecision =>
+  decideWall({ scene: a.scene, meter, width: a.img.naturalWidth, height: a.img.naturalHeight, luma: a.luma, sharpness: a.sharpness, limitedSpace, groundSeen: meter ? groundOf(a, meter).visible : undefined }, mode);
+
+/** Is the ground in the photo (ground.ts)? */
+export const groundOf = (a: WallAnalysis, meter: MeterSpot): GroundCheck =>
+  checkGround({ rgba: a.rgba.data, width: a.rgba.width, height: a.rgba.height, meter, detections: a.detections ?? [] });
+
+/** Clear wall beside the confirmed meter, or null without the detector. */
+export function measureSpace(a: WallAnalysis, meter: MeterSpot, mode: WallMode): SpaceFinding | null {
+  if (!a.detections) return null;
+  const green = greenProfile(a.rgba.data, a.rgba.width, a.rgba.height, ...plantBand(meter));
+  return findSpace({ meter, detections: a.detections, green, width: a.img.naturalWidth, height: a.img.naturalHeight, mode });
+}
+
+/** The confirmed meter with a sanity-checked ruler (see checkRuler). */
+export const withRuler = (a: WallAnalysis, meter: MeterSpot | null): MeterSpot | null =>
+  meter && a.detections ? checkRuler(meter, a.detections, a.img.naturalWidth, a.img.naturalHeight) : meter;

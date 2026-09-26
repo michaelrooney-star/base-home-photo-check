@@ -1,0 +1,37 @@
+[
+ {
+  "file": "wall.png",
+  "step": "wall",
+  "note": "Base guide sample: brick wall, clear on both sides",
+  "meter": [
+   0.489,
+   0.381
+  ],
+  "ground": true
+ },
+ {
+  "file": "right.png",
+  "step": "right",
+  "note": "Base guide sample: right of meter",
+  "meter": [
+   0.073,
+   0.386
+  ],
+  "ground": true
+ },
+ {
+  "file": "left.png",
+  "step": "left",
+  "note": "Base guide sample: left of meter",
+  "meter": [
+   0.792,
+   0.342
+  ],
+  "ground": true
+ },
+ {
+  "file": "adjacent.png",
+  "step": "wall",
+  "note": "Base guide sample: adjacent wall (no meter)"
+ }
+]
