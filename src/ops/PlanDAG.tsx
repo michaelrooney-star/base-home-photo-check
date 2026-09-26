@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { CheckCircle, Loader2, Clock, AlertTriangle, AlertOctagon, HelpCircle } from 'lucide-react';
 
@@ -12,6 +12,7 @@ export type PlanNodeVM = {
   conflict?: boolean; // e.g., fire NO_REQUIREMENT vs verified
   degraded?: boolean; // utility fallback used
   failed?: boolean; // explicit failure
+  attempts?: number;
 };
 
 export type PlanDAGProps = {
@@ -37,15 +38,15 @@ function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolea
   for (const n of nodes) byWave[n.wave].push(n);
 
   // sizes
-  const colGap = isMobile ? 40 : 36;          // 32–48px between columns
-  const rowGap = isMobile ? 12 : 12;          // 12–16px between siblings
-  const nodeW = isMobile ? Math.max(220, containerWidth - 24) : 150; // desktop ~150px
-  const nodeH = isMobile ? 56 : 40;           // mobile ≥44; desktop 40 (click hit padded to ≥44)
+  const colGap = isMobile ? 28 : 40;
+  const rowGap = isMobile ? 12 : 14;
+  const nodeW = isMobile ? Math.max(240, containerWidth - 24) : 150;
+  const nodeH = isMobile ? 52 : 44;
 
   const columns = isMobile ? 1 : 3;
   const colWidth = nodeW;
   const xBase = 12;
-  const yBase = 12;
+  const yBase = 34;
 
   const pos: Record<string, { x: number; y: number }> = {};
   let width = isMobile ? nodeW + 24 : columns * colWidth + (columns - 1) * colGap + 24;
@@ -69,7 +70,7 @@ function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolea
   } else {
     // Columns left→right by wave; rows by index
     const maxRows = Math.max(byWave[0].length, byWave[1].length, byWave[2].length, 1);
-    height = yBase + maxRows * (nodeH + rowGap) + 12;
+    height = yBase + maxRows * (nodeH + rowGap) + 18;
     for (const wave of [0, 1, 2] as const) {
       const list = byWave[wave];
       const x = xBase + wave * (colWidth + colGap);
@@ -181,7 +182,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
             [0, 1, 2].map((wIdx) => (
               <div
                 key={wIdx}
-                className="absolute text-[10px] text-slate-500"
+                className="absolute console-dag-wave-label"
                 style={{
                   left: (layout.colX[wIdx] ?? 12) + layout.nodeW / 2,
                   top: 2,
@@ -196,7 +197,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
             [0, 1, 2].map((wIdx) => (
               <div
                 key={wIdx}
-                className="absolute text-[10px] text-slate-500"
+                className="absolute console-dag-wave-label"
                 style={{
                   left: 16,
                   top: (layout.waveTopY[wIdx] ?? 12) - 10,
@@ -217,33 +218,21 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
             <button
               key={n.id}
               onClick={() => onSelectNode(n.id)}
-            className={
-              "absolute text-left rounded-full border px-3 py-1 focus:outline-none shadow-sm " +
-              (selectedNodeId === n.id ? "ring-2 ring-blue-500" : "")
-            }
+            className={`console-dag-node absolute text-left ${selectedNodeId === n.id ? 'is-selected' : ''} ${visual.tone}`}
               style={{
                 background: colors.bg,
                 borderColor: colors.border,
                 left: p.x,
                 top: p.y,
-              // Chips auto-width; maintain min hit area
-              minHeight: isMobile ? 44 : 36,
+              minHeight: layout.nodeH,
+              width: layout.nodeW,
               }}
               aria-label={`${n.worker} ${visual.label}`}
             data-node-id={n.id}
             >
-            <div className="flex items-center justify-between gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Icon size={16} className={visual.colorClass + (visual.spin ? ' animate-spin' : '')} />
-                <div className="font-medium capitalize truncate">{n.worker.replace('_', ' ')}</div>
-                </div>
-                {n.degraded && n.worker === 'utility_rules' ? (
-                <span className="ml-2 inline-block rounded bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5">degraded</span>
-                ) : null}
-              <span className="text-[11px] text-gray-700 shrink-0">
-                {shortStatus(n)}
-              </span>
-              </div>
+            <span className="console-dag-pill-icon"><Icon size={16} className={visual.colorClass + (visual.spin ? ' animate-spin' : '')} /></span>
+            <span className="console-dag-pill-name">{workerLabel(n.worker)}</span>
+            <span className="console-dag-pill-state">{visual.label}</span>
               {(n.failed || n.state === 'FAILED' || n.conflict) && (
                 <span className="absolute -inset-0.5 rounded ring-2 ring-red-500 animate-pulse pointer-events-none" />
               )}
@@ -271,28 +260,20 @@ function cpEdge(fromId: string, toId: string): boolean {
 }
 
 function useViewport(ref: React.RefObject<HTMLElement | null>): [number, boolean] {
-  const width = useRefNumber(0);
-  const isMobile = useRefNumber(0);
+  const [width, setWidth] = useState(360);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   useEffect(() => {
     function update() {
       const w = ref.current?.clientWidth ?? 360;
-      width.set(w);
-      isMobile.set(w < 768 ? 1 : 0);
+      setWidth(w);
+      setIsMobile(window.innerWidth < 768);
     }
     update();
     const obs = new ResizeObserver(update);
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
   }, [ref]);
-  return [width.get(), isMobile.get() === 1];
-}
-
-function useRefNumber(initial: number) {
-  const r = useRef({ v: initial });
-  return {
-    get: () => r.current.v,
-    set: (v: number) => (r.current.v = v),
-  };
+  return [width, isMobile];
 }
 
 function nodeVisual(n: PlanNodeVM): {
@@ -300,23 +281,28 @@ function nodeVisual(n: PlanNodeVM): {
   label: string;
   colorClass: string;
   spin?: boolean;
+  tone: string;
 } {
   if (n.state === 'FAILED' || n.failed) {
-    return { Icon: AlertOctagon, label: 'Failed', colorClass: 'text-red-600' };
+    return { Icon: AlertOctagon, label: 'Failed', colorClass: 'text-red-600', tone: 'is-danger' };
   }
   if (n.conflict || (n.degraded && n.worker === 'utility_rules')) {
-    return { Icon: AlertTriangle, label: 'Needs review', colorClass: 'text-amber-600' };
+    return { Icon: AlertTriangle, label: 'Needs review', colorClass: 'text-amber-600', tone: 'is-review' };
   }
   if (n.state === 'DONE') {
-    return { Icon: CheckCircle, label: 'Success', colorClass: 'text-green-600' };
+    return { Icon: CheckCircle, label: 'Complete', colorClass: 'text-green-600', tone: 'is-done' };
   }
   if (n.state === 'RUNNING') {
-    return { Icon: Loader2, label: 'Running', colorClass: 'text-blue-600', spin: true };
+    return { Icon: Loader2, label: 'Running', colorClass: 'text-blue-600', spin: true, tone: 'is-running' };
   }
   if (n.state === 'PENDING') {
-    return { Icon: Clock, label: 'Queued', colorClass: 'text-gray-600' };
+    return { Icon: Clock, label: 'Queued', colorClass: 'text-gray-600', tone: 'is-queued' };
   }
-  return { Icon: HelpCircle, label: 'Unknown', colorClass: 'text-violet-700' };
+  return { Icon: HelpCircle, label: 'Unknown', colorClass: 'text-violet-700', tone: 'is-unknown' };
+}
+
+function workerLabel(worker: PlanNodeVM['worker']) {
+  return ({ resolve_pack: 'Resolve pack', city: 'City review', electrical: 'Electrical', fire: 'Fire safety', utility_rules: 'Utility rules', reconcile: 'Reconcile' })[worker];
 }
 
 function LegendItem({ icon, label }: { icon: React.ReactNode; label: string }) {
@@ -326,15 +312,6 @@ function LegendItem({ icon, label }: { icon: React.ReactNode; label: string }) {
       <span>{label}</span>
     </div>
   );
-}
-
-function shortStatus(n: PlanNodeVM): string {
-  if (n.state === 'FAILED' || n.failed) return 'fail';
-  if (n.conflict || (n.degraded && n.worker === 'utility_rules')) return 'review';
-  if (n.state === 'DONE') return 'done';
-  if (n.state === 'RUNNING') return 'run';
-  if (n.state === 'PENDING') return 'queued';
-  return 'unk';
 }
 
 // Helpers: desktop bus layout

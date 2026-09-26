@@ -28,7 +28,7 @@ export function CaseDetail() {
   const vmNodes: PlanNodeVM[] = useMemo(() => !rec ? [] : rec.plan.map((n) => ({
     id: n.id, worker: n.worker, wave: n.wave, dependsOn: n.dependsOn, state: n.state,
     conflict: n.worker === 'fire' && n.result?.findings?.some((f) => f.domain === 'FIRE' && f.requirement === 'NO_REQUIREMENT'),
-    failed: n.state === 'FAILED', degraded: rec.degraded && n.worker === 'utility_rules',
+    failed: n.state === 'FAILED', degraded: rec.degraded && n.worker === 'utility_rules', attempts: n.result?.attempts,
   })), [rec]);
   const selectedNode = useMemo(() => rec?.plan.find((n) => n.id === selectedNodeId), [rec, selectedNodeId]);
   function onSelectNode(id: string) { setSelectedNodeId(id); setShowSheet(true); }

@@ -15,7 +15,7 @@ export type CaseFingerprint = {
   utility_type: UtilityType; // derived
 };
 
-export type CaseStatus = 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN';
+export type CaseStatus = 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN' | 'QUEUED';
 export type JobState =
   | 'QUEUED'
   | 'PLANNED'
@@ -87,6 +87,7 @@ export type CaseRecord = {
   degraded: boolean; // fallback used
   plan: PlanNode[];
   why: Finding[]; // reconciled findings
+  demoStage?: 'queued' | 'running' | 'ready' | 'review' | 'degraded' | 'blocked' | 'unknown';
 };
 
 export type AdminToggles = {

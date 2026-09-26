@@ -86,7 +86,7 @@ async function runUtilityWorker(caseRec: CaseRecord): Promise<WorkerResult> {
   };
 }
 
-function makePlan(caseId: string): PlanNode[] {
+export function makePlan(_caseId: string): PlanNode[] {
   return [
     {
       id: 'n0_resolve_pack',
@@ -133,12 +133,64 @@ function makePlan(caseId: string): PlanNode[] {
   ];
 }
 
+function demoResult(status: 'ok' | 'failed', attempts = 1): WorkerResult {
+  return status === 'ok'
+    ? { status, findings: [], attempts }
+    : { status, error: 'Injected demo worker failure', attempts };
+}
+
+function applyDemoStage(rec: CaseRecord) {
+  if (!rec.demoStage || rec.demoStage === 'ready') return false;
+  const nodes = rec.plan;
+  const node = (id: string) => nodes.find((n) => n.id === id)!;
+  const finish = (id: string) => { node(id).state = 'DONE'; node(id).result = demoResult('ok'); };
+
+  if (rec.demoStage === 'queued') {
+    rec.jobState = 'QUEUED'; rec.status = 'QUEUED';
+    return true;
+  }
+  finish('n0_resolve_pack');
+  if (rec.demoStage === 'running') {
+    node('n1_city').state = 'RUNNING'; node('n1_city').result = demoResult('ok');
+    rec.jobState = 'RUNNING'; rec.status = 'QUEUED';
+    return true;
+  }
+  finish('n1_city'); finish('n1_electrical');
+  if (rec.demoStage === 'review') {
+    node('n1_fire').state = 'DONE';
+    node('n1_fire').result = { status: 'ok', attempts: 1, findings: [{ domain: 'FIRE', summary: 'Conflicting fire guidance needs operator review.', citations: [], requirement: 'NO_REQUIREMENT', ruleIds: ['austin_fire_guidance'] }] };
+    rec.jobState = 'NEEDS_REVIEW'; rec.status = 'NEEDS_REVIEW';
+    return true;
+  }
+  finish('n1_fire');
+  if (rec.demoStage === 'degraded') {
+    node('n1_utility_rules').state = 'FAILED'; node('n1_utility_rules').result = demoResult('failed', 2);
+    rec.degraded = true; rec.jobState = 'OPS_READY'; rec.status = 'OPS_READY';
+    return true;
+  }
+  if (rec.demoStage === 'blocked') {
+    node('n1_utility_rules').state = 'FAILED'; node('n1_utility_rules').result = demoResult('failed');
+    rec.jobState = 'BLOCKED'; rec.status = 'BLOCKED';
+    return true;
+  }
+  if (rec.demoStage === 'unknown') {
+    rec.jobState = 'UNKNOWN'; rec.status = 'UNKNOWN';
+    return true;
+  }
+  return false;
+}
+
 export async function planAndRun(caseId: string): Promise<CaseRecord | undefined> {
   const rec = getCase(caseId);
   if (!rec) return undefined;
 
+  const isFirstDemoPreview = rec.plan.length === 0 && Boolean(rec.demoStage);
   rec.jobState = 'PLANNED';
   rec.plan = makePlan(caseId);
+  if (isFirstDemoPreview && applyDemoStage(rec)) {
+    saveCase(rec);
+    return rec;
+  }
   saveCase(rec);
 
   rec.jobState = 'RUNNING';

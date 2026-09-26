@@ -5,6 +5,7 @@ import {
   Finding,
   PackId,
 } from './types';
+import { makePlan } from './runner';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -75,20 +76,28 @@ function makeFingerprint(overrides: Partial<CaseFingerprint>): CaseFingerprint {
 function newCase(
   assignee: string,
   fp: CaseFingerprint,
-  pack: PackId
+  pack: PackId,
+  demoStage: CaseRecord['demoStage'] = 'queued'
 ): CaseRecord {
   const id = uid();
+  const initialStatus = demoStage === 'ready' || demoStage === 'degraded' ? 'OPS_READY' :
+    demoStage === 'review' ? 'NEEDS_REVIEW' : demoStage === 'blocked' ? 'BLOCKED' :
+    demoStage === 'unknown' ? 'UNKNOWN' : 'QUEUED';
+  const initialJobState = demoStage === 'ready' || demoStage === 'degraded' ? 'OPS_READY' :
+    demoStage === 'review' ? 'NEEDS_REVIEW' : demoStage === 'blocked' ? 'BLOCKED' :
+    demoStage === 'unknown' ? 'UNKNOWN' : demoStage === 'running' ? 'RUNNING' : 'QUEUED';
   return {
     id,
     created_at: Date.now(),
     assignee,
     fingerprint: fp,
     pack,
-    jobState: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
-    status: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
+    jobState: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : initialJobState,
+    status: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : initialStatus,
     degraded: false,
     plan: [],
     why: findingsForPack(pack),
+    demoStage,
   };
 }
 
@@ -97,14 +106,20 @@ export function seedDemoCases() {
   ensureRulesLoaded();
   const cases: CaseRecord[] = [];
 
-  // Austin rich – several cases for Maya
-  for (let i = 0; i < 7; i++) {
-    const fp = makeFingerprint({
-      address: `${100 + i} S Congress Ave`,
-      city: 'Austin',
-      utility: 'Austin Energy',
-    });
-    const rec = newCase('ops_maya', fp, 'AUSTIN_RICH');
+  // A compact showcase set for Maya: each case intentionally demonstrates a different stage.
+  const mayaStages: Array<{ address: string; stage: CaseRecord['demoStage'] }> = [
+    { address: '105 S Congress Ave', stage: 'ready' },
+    { address: '214 E 6th St', stage: 'running' },
+    { address: '801 W 5th St', stage: 'review' },
+    { address: '1201 E Riverside Dr', stage: 'degraded' },
+    { address: '4401 Duval St', stage: 'queued' },
+    { address: '2300 Barton Springs Rd', stage: 'blocked' },
+    { address: '9100 Research Blvd', stage: 'unknown' },
+  ];
+  for (const item of mayaStages) {
+    const fp = makeFingerprint({ address: item.address, city: 'Austin', utility: 'Austin Energy' });
+    const rec = newCase('ops_maya', fp, item.stage === 'unknown' ? 'UNKNOWN_PACK' : 'AUSTIN_RICH', item.stage);
+    if (item.stage === 'unknown') rec.plan = makePlan(rec.id);
     cases.push(rec);
   }
 
@@ -116,7 +131,7 @@ export function seedDemoCases() {
       county: 'Williamson',
       utility: 'Oncor',
     });
-    const rec = newCase('ops_sam', fp, 'ROUNDROCK_ONCOR');
+    const rec = newCase('ops_sam', fp, 'ROUNDROCK_ONCOR', 'ready');
     cases.push(rec);
   }
 
@@ -128,7 +143,7 @@ export function seedDemoCases() {
       county: 'Dallas',
       utility: 'Oncor',
     });
-    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'DALLAS_ONCOR');
+    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'DALLAS_ONCOR', 'ready');
     cases.push(rec);
   }
 
@@ -140,7 +155,7 @@ export function seedDemoCases() {
       county: 'Bexar',
       utility: 'CPS Energy',
     });
-    const rec = newCase('ops_sam', fp, 'SANANTONIO_STUB');
+    const rec = newCase('ops_sam', fp, 'SANANTONIO_STUB', 'ready');
     cases.push(rec);
   }
 
@@ -152,7 +167,7 @@ export function seedDemoCases() {
       county: 'Harris',
       utility: 'CenterPoint Energy',
     });
-    const rec = newCase('ops_maya', fp, 'HOUSTON_STUB');
+    const rec = newCase('ops_maya', fp, 'HOUSTON_STUB', 'ready');
     cases.push(rec);
   }
 
@@ -164,7 +179,7 @@ export function seedDemoCases() {
       county: 'McLennan',
       utility: '—',
     });
-    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'UNKNOWN_PACK');
+    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'UNKNOWN_PACK', 'unknown');
     cases.push(rec);
   }
 
