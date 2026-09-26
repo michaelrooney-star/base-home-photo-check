@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.sites-runtime/
+public/vendor/
+*.tsbuildinfo
+.env
+.DS_Store
