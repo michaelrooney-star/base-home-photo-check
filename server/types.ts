@@ -15,7 +15,7 @@ export type CaseFingerprint = {
   utility_type: UtilityType; // derived
 };
 
-export type CaseStatus = 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN';
+export type CaseStatus = 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN';
 export type JobState =
   | 'QUEUED'
   | 'PLANNED'
@@ -39,6 +39,13 @@ export type Citation = {
   label: string;
   url?: string;
   source?: string;
+};
+
+export type SitePhoto = {
+  id: string;
+  title: string;
+  src: string;
+  note: string;
 };
 
 export type Finding = {
@@ -86,6 +93,7 @@ export type CaseRecord = {
   degraded: boolean; // fallback used
   plan: PlanNode[];
   why: Finding[]; // reconciled findings
+  sitePhotos?: SitePhoto[];
 };
 
 export type AdminToggles = {

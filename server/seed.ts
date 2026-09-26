@@ -4,6 +4,8 @@ import {
   CaseRecord,
   Finding,
   PackId,
+  PlanNode,
+  SitePhoto,
 } from './types';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -126,21 +128,61 @@ function makeFingerprint(overrides: Partial<CaseFingerprint>): CaseFingerprint {
 function newCase(
   assignee: string,
   fp: CaseFingerprint,
-  pack: PackId
+  pack: PackId,
+  photoSet: 'set-a' | 'set-b' | 'set-c' = 'set-a',
+  stage: 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED' | 'UNKNOWN' = 'QUEUED'
 ): CaseRecord {
   const id = uid();
+  const unknown = pack === 'UNKNOWN_PACK' || stage === 'UNKNOWN';
+  const status = unknown ? 'UNKNOWN' : stage === 'DEGRADED' ? 'OPS_READY' : stage;
   return {
     id,
     created_at: Date.now(),
     assignee,
     fingerprint: fp,
     pack,
-    jobState: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
-    status: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
-    degraded: false,
-    plan: [],
+    jobState: status,
+    status,
+    degraded: stage === 'DEGRADED',
+    plan: stage === 'QUEUED' || unknown ? [] : stagedPlan(stage),
     why: packCitations[pack] ?? [],
+    sitePhotos: mockSitePhotos(photoSet),
   };
+}
+
+function stagedPlan(stage: 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED'): PlanNode[] {
+  const ok = (findings: Finding[] = []) => ({ status: 'ok' as const, findings, attempts: 1 });
+  const plan: PlanNode[] = [
+    { id: 'n0_resolve_pack', wave: 0, worker: 'resolve_pack', dependsOn: [], state: 'DONE', result: ok() },
+    { id: 'n1_city', wave: 1, worker: 'city', dependsOn: ['n0_resolve_pack'], state: 'DONE', result: ok() },
+    { id: 'n1_electrical', wave: 1, worker: 'electrical', dependsOn: ['n0_resolve_pack'], state: 'DONE', result: ok() },
+    { id: 'n1_fire', wave: 1, worker: 'fire', dependsOn: ['n0_resolve_pack'], state: 'DONE', result: ok() },
+    { id: 'n1_utility_rules', wave: 1, worker: 'utility_rules', dependsOn: ['n0_resolve_pack'], state: 'DONE', result: ok() },
+    { id: 'n2_reconcile', wave: 2, worker: 'reconcile', dependsOn: ['n1_city', 'n1_electrical', 'n1_fire', 'n1_utility_rules'], state: 'DONE', result: ok() },
+  ];
+  if (stage === 'NEEDS_REVIEW') plan[3].result = ok([{ domain: 'FIRE', summary: 'Worker result conflicts with the verified fire requirement.', citations: [], requirement: 'NO_REQUIREMENT' }]);
+  if (stage === 'BLOCKED') {
+    plan[1].state = 'FAILED';
+    plan[1].result = { status: 'failed', error: 'City permit source could not be reconciled.', attempts: 2 };
+  }
+  if (stage === 'DEGRADED') {
+    plan[4].state = 'FAILED';
+    plan[4].result = { status: 'failed', error: 'Utility source timed out; cached verified rules used.', attempts: 2 };
+  }
+  return plan;
+}
+
+function mockSitePhotos(set: 'set-a' | 'set-b' | 'set-c'): SitePhoto[] {
+  const path = (id: string) => `/images/cases/${set}/${id}.jpg`;
+  return [
+    { id: 'meter', title: 'Meter number', src: path('meter'), note: 'Customer photo · clear enough to review' },
+    { id: 'wall', title: 'Whole meter wall', src: path('wall'), note: 'Customer photo · exterior context' },
+    { id: 'left', title: 'Left side of meter', src: path('left'), note: 'Customer photo · side clearance' },
+    { id: 'right', title: 'Right side of meter', src: path('right'), note: 'Customer photo · side clearance' },
+    { id: 'breaker', title: 'Main breaker box', src: path('breaker'), note: 'Customer photo · service equipment' },
+    { id: 'rating', title: 'Main disconnect rating', src: path('rating'), note: 'Customer photo · rating plate' },
+    { id: 'adjacent', title: 'Adjacent wall', src: path('adjacent'), note: 'Customer photo · surrounding area' },
+  ];
 }
 
 export function seedDemoCases() {
@@ -154,7 +196,7 @@ export function seedDemoCases() {
       city: 'Austin',
       utility: 'Austin Energy',
     });
-    const rec = newCase('ops_maya', fp, 'AUSTIN_RICH');
+    const rec = newCase('ops_maya', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'DEGRADED', 'QUEUED', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED');
     cases.push(rec);
   }
 
@@ -166,7 +208,7 @@ export function seedDemoCases() {
       county: 'Williamson',
       utility: 'Oncor',
     });
-    const rec = newCase('ops_sam', fp, 'ROUNDROCK_ONCOR');
+    const rec = newCase('ops_sam', fp, 'ROUNDROCK_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
     cases.push(rec);
   }
 
@@ -178,7 +220,7 @@ export function seedDemoCases() {
       county: 'Dallas',
       utility: 'Oncor',
     });
-    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'DALLAS_ONCOR');
+    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'DALLAS_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'NEEDS_REVIEW' : 'QUEUED');
     cases.push(rec);
   }
 
@@ -190,7 +232,7 @@ export function seedDemoCases() {
       county: 'Bexar',
       utility: 'CPS Energy',
     });
-    const rec = newCase('ops_sam', fp, 'SANANTONIO_STUB');
+    const rec = newCase('ops_sam', fp, 'SANANTONIO_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
     cases.push(rec);
   }
 
@@ -202,7 +244,7 @@ export function seedDemoCases() {
       county: 'Harris',
       utility: 'CenterPoint Energy',
     });
-    const rec = newCase('ops_maya', fp, 'HOUSTON_STUB');
+    const rec = newCase('ops_maya', fp, 'HOUSTON_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'BLOCKED' : 'QUEUED');
     cases.push(rec);
   }
 
@@ -214,7 +256,7 @@ export function seedDemoCases() {
       county: 'McLennan',
       utility: '—',
     });
-    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'UNKNOWN_PACK');
+    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'UNKNOWN_PACK', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
     cases.push(rec);
   }
 

@@ -1,5 +1,7 @@
+import { ArrowUpRight, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { StatusPill, statusLabel, statusTone } from '../components/ConsoleShell';
 
 type CaseRow = {
   id: string;
@@ -12,101 +14,91 @@ type CaseRow = {
   degraded: boolean;
 };
 
+const filters = ['ALL', 'OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'UNKNOWN'] as const;
+
 export function Queue() {
   const { userId } = useParams();
   const [rows, setRows] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stale, setStale] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const firstLoad = useRef(true);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<(typeof filters)[number]>('ALL');
 
   useEffect(() => {
     let ignore = false;
-    async function load() {
-      setLoading(true);
-      const res = await fetch(`/api/ops/queue/${userId}`);
-      const data = await res.json();
-      if (!ignore) {
-        setRows(data.cases ?? []);
-        setLoading(false);
+    async function load(initial = false) {
+      if (!initial) setRefreshing(true);
+      try {
+        const res = await fetch(`/api/ops/queue/${userId}`);
+        const data = await res.json();
+        if (!ignore) {
+          setRows(data.cases ?? []);
+          setLastUpdated(new Date());
+          setStale(false);
+          if (firstLoad.current) {
+            firstLoad.current = false;
+            setLoading(false);
+          }
+        }
+      } catch {
+        if (!ignore) {
+          setStale(true);
+          if (firstLoad.current) {
+            firstLoad.current = false;
+            setLoading(false);
+          }
+        }
+      } finally {
+        if (!ignore) setRefreshing(false);
       }
     }
-    load();
-    const t = setInterval(load, 4000);
-    return () => {
-      ignore = true;
-      clearInterval(t);
-    };
+    void load(true);
+    return () => { ignore = true; };
   }, [userId]);
 
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-medium">Queue — {userId}</h2>
-        <Link className="text-blue-600 hover:underline" to="/admin">Admin</Link>
-      </div>
-      {loading ? (
-        <div>Loading…</div>
-      ) : (
-        <>
-          {/* Mobile: card list */}
-          <div className="md:hidden space-y-2">
-            {rows.map((r) => (
-              <Link
-                key={r.id}
-                to={`/ops/${userId}/case/${r.id}`}
-                className="block rounded border p-3 active:scale-[0.99]"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="font-mono">{r.id.slice(0, 6)}</div>
-                  {r.degraded ? <span className="rounded bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5">degraded</span> : null}
-                </div>
-                <div className="text-sm">{r.fingerprint.address}</div>
-                <div className="text-xs text-gray-600">{r.fingerprint.city} · {r.fingerprint.utility}</div>
-                <div className="mt-1 text-xs">
-                  <span className="uppercase tracking-wide text-gray-500">job</span> {r.jobState} · <span className="uppercase tracking-wide text-gray-500">status</span> {r.status.replace('_', ' ')}
-                </div>
-              </Link>
-            ))}
-          </div>
-          {/* Desktop: table */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="min-w-[800px] w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left px-2 py-1">Case</th>
-                  <th className="text-left px-2 py-1">Address</th>
-                  <th className="text-left px-2 py-1">City</th>
-                  <th className="text-left px-2 py-1">Utility</th>
-                  <th className="text-left px-2 py-1">Pack</th>
-                  <th className="text-left px-2 py-1">Job</th>
-                  <th className="text-left px-2 py-1">Status</th>
-                  <th className="text-left px-2 py-1">Badge</th>
-                  <th className="text-left px-2 py-1"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b last:border-b-0">
-                    <td className="px-2 py-1 font-mono">{r.id.slice(0, 6)}</td>
-                    <td className="px-2 py-1">{r.fingerprint.address}</td>
-                    <td className="px-2 py-1">{r.fingerprint.city}</td>
-                    <td className="px-2 py-1">{r.fingerprint.utility}</td>
-                    <td className="px-2 py-1">{r.pack}</td>
-                    <td className="px-2 py-1">{r.jobState}</td>
-                    <td className="px-2 py-1">
-                      {r.status.replace('_', ' ')}
-                    </td>
-                    <td className="px-2 py-1">
-                      {r.degraded ? <span className="inline-block rounded bg-yellow-100 text-yellow-800 px-2 py-0.5">degraded</span> : null}
-                    </td>
-                    <td className="px-2 py-1">
-                      <Link className="text-blue-600 hover:underline" to={`/ops/${userId}/case/${r.id}`}>Open</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+  async function refreshQueue() {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/ops/queue/${userId}`);
+      const data = await res.json();
+      setRows(data.cases ?? []);
+      setLastUpdated(new Date());
+      setStale(false);
+    } catch {
+      setStale(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const counts = useMemo(() => rows.reduce<Record<string, number>>((acc, row) => {
+    acc[row.status] = (acc[row.status] ?? 0) + 1;
+    return acc;
+  }, {}), [rows]);
+
+  const visibleRows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      const matchesFilter = filter === 'ALL' || row.status === filter;
+      const haystack = `${row.id} ${row.fingerprint.address} ${row.fingerprint.city} ${row.fingerprint.utility} ${row.pack}`.toLowerCase();
+      return matchesFilter && (!needle || haystack.includes(needle));
+    });
+  }, [filter, query, rows]);
+
+  return <section className="console-page">
+    <div className="console-page-heading"><div><p className="console-eyebrow"><span /> OPERATIONS QUEUE</p><h1>Cases ready for review<span>.</span></h1><p className="console-page-description">Track permit research, conflicts, and jurisdiction packs as they move through the workflow.</p></div><div className="console-heading-meta"><span className={`console-live-dot ${stale ? 'is-stale' : ''}`} />{stale ? 'Stale · refresh failed' : lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Waiting for first update'}<button className="console-refresh-button" onClick={refreshQueue} disabled={refreshing}><RefreshCw size={14} className={refreshing ? 'console-spin' : ''} />{refreshing ? 'Refreshing' : 'Refresh'}</button></div></div>
+    <div className="console-summary-grid" aria-label="Queue summary">
+      <div className="console-summary-card"><span>Total cases</span><strong>{rows.length}</strong><small>Assigned to {userId}</small></div><div className="console-summary-card is-ready"><span>Ops ready</span><strong>{counts.OPS_READY ?? 0}</strong><small>Ready for the next step</small></div><div className="console-summary-card is-review"><span>Needs review</span><strong>{(counts.NEEDS_REVIEW ?? 0) + (counts.BLOCKED ?? 0)}</strong><small>Requires operator attention</small></div><div className="console-summary-card is-muted"><span>Queued</span><strong>{counts.QUEUED ?? 0}</strong><small>Waiting to run</small></div>
     </div>
-  );
+    <div className="console-toolbar"><label className="console-search"><Search size={17} /><span className="sr-only">Search cases</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search cases, addresses, or utilities" /></label><div className="console-filter-wrap"><SlidersHorizontal size={16} /><span>View</span>{filters.map((item) => <button key={item} className={filter === item ? 'is-active' : ''} onClick={() => setFilter(item)}>{item === 'ALL' ? 'All cases' : statusLabel(item)}</button>)}</div></div>
+    <div className="console-section-heading"><div><p className="console-eyebrow"><span /> CASE QUEUE</p><h2>{visibleRows.length} visible cases</h2></div><span className="console-section-note">Select a case to inspect its plan</span></div>
+    {loading ? <div className="console-empty-state">Loading the queue…</div> : visibleRows.length === 0 ? <div className="console-empty-state">No cases match this view.</div> : <><div className="console-case-cards">{visibleRows.map((row) => <CaseCard key={row.id} row={row} userId={userId ?? ''} />)}</div><div className="console-table-wrap"><table className="console-table"><thead><tr><th>Case</th><th>Address</th><th>City</th><th>Utility</th><th>Pack</th><th>Job</th><th>Status</th><th /></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td><span className="console-case-id">{row.id.slice(0, 6)}</span></td><td><strong>{row.fingerprint.address}</strong></td><td>{row.fingerprint.city}</td><td>{row.fingerprint.utility}</td><td><span className="console-pack">{row.pack}</span></td><td>{row.jobState}</td><td><StatusPill tone={statusTone(row.status, row.degraded)}>{row.degraded ? 'Degraded' : statusLabel(row.status)}</StatusPill></td><td><Link className="console-open-link" to={`/ops/${userId}/case/${row.id}`}>Open <ArrowUpRight size={14} /></Link></td></tr>)}</tbody></table></div></>}
+  </section>;
+}
+
+function CaseCard({ row, userId }: { row: CaseRow; userId: string }) {
+  return <Link to={`/ops/${userId}/case/${row.id}`} className="console-case-card"><div className="console-case-card-top"><span className="console-case-id">{row.id.slice(0, 6)}</span><StatusPill tone={statusTone(row.status, row.degraded)}>{row.degraded ? 'Degraded' : statusLabel(row.status)}</StatusPill></div><strong>{row.fingerprint.address}</strong><span>{row.fingerprint.city} · {row.fingerprint.utility}</span><div className="console-case-card-bottom"><span>{row.pack}</span><ArrowUpRight size={15} /></div></Link>;
 }

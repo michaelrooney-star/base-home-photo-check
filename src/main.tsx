@@ -7,6 +7,9 @@ import { OpsLayout } from './ops/OpsLayout';
 import { Queue } from './ops/Queue';
 import { CaseDetail } from './ops/CaseDetail';
 import { Admin } from './admin/Admin';
+import { KnowledgeHome } from './admin/knowledge/KnowledgeHome';
+import { KnowledgePack } from './admin/knowledge/KnowledgePack';
+import { KnowledgeRule } from './admin/knowledge/KnowledgeRule';
 
 const router = createBrowserRouter([
   { path: '/', element: <App /> },
@@ -19,6 +22,9 @@ const router = createBrowserRouter([
     ],
   },
   { path: '/admin', element: <Admin /> },
+  { path: '/admin/knowledge', element: <KnowledgeHome /> },
+  { path: '/admin/knowledge/packs/:packId', element: <KnowledgePack /> },
+  { path: '/admin/knowledge/rules/:ruleId', element: <KnowledgeRule /> },
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
