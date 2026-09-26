@@ -156,10 +156,10 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
             style={{ pointerEvents: 'none' }}
           >
           <defs>
-            <marker id="arrow-slate" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155" />
             </marker>
-            <marker id="arrow-violet" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#6D28D9" />
             </marker>
           </defs>
@@ -360,7 +360,7 @@ function drawDesktopBusPaths(
       const csz = sizeOf(child.id);
       const cy = cp.y + csz.h / 2;
       const color = edgeColor(s.id, child.id);
-      const width = cpEdge(s.id, child.id) ? 4 : 2.5;
+      const width = cpEdge(s.id, child.id) ? 2.25 : 1.6;
       const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
       const d = `M ${sx} ${sy} L ${busX} ${sy} L ${busX} ${cy} L ${cp.x} ${cy}`;
       out.push(<path key={`${s.id}->${child.id}`} d={d} stroke={color} strokeWidth={width} fill="none" markerEnd={marker} />);
@@ -378,7 +378,7 @@ function drawDesktopBusPaths(
       const sx = cp.x + csz.w;
       const sy = cp.y + csz.h / 2;
       const color = edgeColor(child.id, t.id);
-      const width = cpEdge(child.id, t.id) ? 4 : 2.5;
+      const width = cpEdge(child.id, t.id) ? 2.25 : 1.6;
       const marker = color === '#6D28D9' ? 'url(#arrow-violet)' : 'url(#arrow-slate)';
       const d = `M ${sx} ${sy} L ${busX} ${sy} L ${busX} ${ty} L ${tx} ${ty}`;
       out.push(<path key={`${child.id}->${t.id}`} d={d} stroke={color} strokeWidth={width} fill="none" markerEnd={marker} />);
@@ -409,11 +409,11 @@ function drawMobileTrunk(
   const arrow = 'url(#arrow-slate)';
   if (g0 && g1) {
     const d = `M ${g0.cx} ${g0.bottom} V ${g1.top - 8}`;
-    out.push(<path key="g0-g1" d={d} stroke="#334155" strokeWidth={3} fill="none" markerEnd={arrow} />);
+    out.push(<path key="g0-g1" d={d} stroke="#334155" strokeWidth={2} fill="none" markerEnd={arrow} />);
   }
   if (g1 && g2) {
     const d = `M ${g1.cx} ${g1.bottom} V ${g2.top - 8}`;
-    out.push(<path key="g1-g2" d={d} stroke="#334155" strokeWidth={3} fill="none" markerEnd={arrow} />);
+    out.push(<path key="g1-g2" d={d} stroke="#334155" strokeWidth={2} fill="none" markerEnd={arrow} />);
   }
   return out;
 }
