@@ -89,15 +89,15 @@ export const WALL_CHECK_LABELS: Record<WallCheckId, string> = {
 
 export const WALL_MESSAGES = {
   loading: 'Getting ready…',
-  point: 'Point your camera at the wall with your electric meter.',
-  closeup: 'You’re too close. Step back at least 10 steps so the whole wall fits in the photo.',
-  indoors: 'This photo needs to be taken outside, of the wall with your electric meter.',
-  other: 'We can’t see the wall of your home. Point your camera at the wall with your electric meter.',
-  landscape: 'Turn your phone sideways to fit more of the wall.',
-  dark: 'It’s too dark. Try again in daylight.',
+  point: 'Point at the wall with your meter.',
+  closeup: 'Too close — step back so the whole wall fits.',
+  indoors: 'Go outside to the wall with your meter.',
+  other: 'Point at the outside wall with your meter.',
+  landscape: 'Turn your phone sideways.',
+  dark: 'Too dark — try in daylight.',
   steady: 'Hold steady.',
-  blurry: 'The photo is blurry. Hold steady and give the camera a moment to focus.',
-  ready: 'Looks good — take the photo when the whole wall, the meter and the ground are in view.',
+  blurry: 'Blurry — hold steady a moment.',
+  ready: 'Looks good — take the photo.',
   // after capture
   noMeter: 'We need your electric meter in this photo. Step back and include the meter and the wall around it.',
   tooClose: 'You’re too close to the meter. Step back until the wall on both sides of the meter and the ground below it are in the photo.',
@@ -106,10 +106,10 @@ export const WALL_MESSAGES = {
   ground: 'We can’t see the ground. Tilt your phone down or step back until the ground in front of the wall is in the photo — that’s where the battery would stand.',
   sceneUnverified: 'We couldn’t check the scene because photo recognition didn’t load.',
   // side photos (right / left of the meter)
-  sidePoint: { right: 'Stand about 10 steps back and face the area to the right of your meter.', left: 'Stand about 10 steps back and face the area to the left of your meter.' },
+  sidePoint: { right: 'Face along the wall to the right of your meter.', left: 'Face along the wall to the left of your meter.' },
   sideReady: {
-    right: 'Looks good — take the photo with your meter on the left and the wall and ground to its right in view.',
-    left: 'Looks good — take the photo with your meter on the right and the wall and ground to its left in view.',
+    right: 'Looks good — take the photo.',
+    left: 'Looks good — take the photo.',
   },
   sideNoMeter: {
     right: 'Keep your meter in the photo, near the left edge, so we can see where the area to its right begins.',
@@ -128,3 +128,23 @@ export const WALL_MESSAGES = {
     left: 'Turn a little to the left, so the meter is on the right side of the photo and we can see the area beside it.',
   },
 } as const;
+
+/** The one-line fix on the result card, for someone holding a phone with their hands full. */
+export type FixId = WallCheckId | 'wrongSide' | 'moreLeft' | 'moreRight';
+export function shortFix(id: FixId, mode: WallMode): string {
+  const side = mode === 'left' ? 'left' : 'right';
+  switch (id) {
+    case 'scene': return 'Point at the outside wall with your meter.';
+    case 'meter': return 'Include your meter in the photo.';
+    case 'orientation': return 'Turn your phone sideways.';
+    case 'light': return 'Too dark — try in daylight.';
+    case 'focus': return 'Blurry — hold steady and retake.';
+    case 'wrongSide': return `Wrong side — face the wall to the ${side} of the meter.`;
+    case 'distance': return 'Step back to show more wall.';
+    case 'moreLeft': return 'Show more wall on the left.';
+    case 'moreRight': return 'Show more wall on the right.';
+    case 'sides': return 'Show more wall beside the meter.';
+    case 'direction': return `Turn a little to the ${side}.`;
+    case 'ground': return 'Tilt down or step back to show the ground.';
+  }
+}

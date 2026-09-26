@@ -1,7 +1,7 @@
 // Whole-meter-wall photo: live instruction and final accept/reject, from observations only. Pure; unit-tested.
 import type { ClassResult } from '../meter/analyzer.ts';
 import type { FastMetrics } from '../meter/metrics.ts';
-import { WALL_CHECK_LABELS, WALL_CRITERIA as C, WALL_MESSAGES as M, type SceneClass, type WallCheckId, type WallMode } from './criteria.ts';
+import { WALL_CHECK_LABELS, WALL_CRITERIA as C, WALL_MESSAGES as M, type FixId, type SceneClass, type WallCheckId, type WallMode } from './criteria.ts';
 
 /** Check labels that depend on which of the three wall photos this is. */
 export function checkLabel(id: WallCheckId, mode: WallMode = 'wall') {
@@ -17,7 +17,9 @@ export type WallEstimate = { leftFt: number; rightFt: number; belowFt: number };
 export type WallEvidence = { scene: SceneResult; meter: MeterSpot | null; width: number; height: number; luma: number; sharpness: number; limitedSpace?: boolean;
   /** Does the bottom of the photo look like ground (ground.ts)? Absent = not checked. */
   groundSeen?: boolean };
-export type WallDecision = { accepted: boolean; checks: WallCheck[]; reasons: string[]; estimate: WallEstimate | null; limitedSpace?: boolean };
+export type WallDecision = { accepted: boolean; checks: WallCheck[]; reasons: string[]; estimate: WallEstimate | null; limitedSpace?: boolean;
+  /** The most important fix, for the short message (criteria.shortFix). */
+  primary: FixId | null };
 
 /** Rough feet of wall visible left/right of the meter and below it, using the meter cover as a ruler. */
 export function estimateFeet(m: MeterSpot, width: number, height: number): WallEstimate | null {
@@ -77,7 +79,9 @@ export function decideWall(e: WallEvidence, mode: WallMode = 'wall'): WallDecisi
   const wrongSide = width.id === 'direction' && width.state === 'fail' && width.message === M.wrongSide[mode as 'right' | 'left'];
   const order = (c: WallCheck) => FIX_ORDER.indexOf(c.id === 'direction' && wrongSide ? 'wrongSide' : c.id);
   const ranked = [...failed].sort((a, b) => order(a) - order(b)).filter(c => !(ids.has('distance') && (c.id === 'sides' || c.id === 'ground' || (c.id === 'direction' && !wrongSide))));
-  return { accepted: failed.length === 0, checks, reasons: [...new Set(ranked.map(c => c.message!))], estimate: est, limitedSpace: waived };
+  const top = ranked[0];
+  const primary: FixId | null = !top ? null : top.id === 'direction' && wrongSide ? 'wrongSide' : top.id === 'sides' ? (top.message === M.moreLeft ? 'moreLeft' : 'moreRight') : top.id;
+  return { accepted: failed.length === 0, checks, reasons: [...new Set(ranked.map(c => c.message!))], estimate: est, limitedSpace: waived, primary };
 }
 
 const FIX_ORDER = ['scene', 'meter', 'orientation', 'light', 'focus', 'wrongSide', 'distance', 'sides', 'direction', 'ground'];

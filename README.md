@@ -151,6 +151,13 @@ Base's guide: "From as far back as possible (at least 10 steps), take a photo of
 - **Can you show more of the wall?** when the photo is accepted but open wall hasn't been found yet. Here "Retake to show more wall" is the main button and "Use this photo" is secondary.
 The photo is marked up too: open wall in green, what's in the way in orange, and a dashed "Ground not in the photo" line when needed. The full list of technical checks sits behind "All photo checks".
 
+**On a phone.** While photos are being taken, the site header, journey bar, footer and checklist sidebar are hidden, so the camera sits near the top of the screen. Held sideways, as the wall photos ask, the camera fills the screen height and the instructions and result sit in a column beside it. The result card is kept short, for someone holding a phone with their hands full:
+- a verdict ("Retake needed" / "Photo accepted" / "Accepted — can you show more wall?");
+- one line to act on ("Tilt down or step back to show the ground.");
+- chips for Meter · Wall · Ground · Open wall;
+- two buttons.
+The explanations are behind "Details", and the card scrolls itself into view.
+
 **One instruction per rejection.** When several checks fail, the customer sees only the most important fix. "Step back" also covers "include more wall" and "include the ground", so they aren't listed as separate, conflicting instructions.
 
 **Object detector.** YOLOE-11M (Ultralytics) with its text prompts baked in, pruned to the detection output and int8-quantized: `public/models/wall-objects.onnx`, about 21 MB, self-hosted, run in the analyzer worker on ONNX Runtime WebAssembly (about 0.5 s on a laptop). It is rebuilt with `scripts/export-wall-detector.py`, which downloads weights from GitHub releases, not Hugging Face. Labels are grouped because the model confuses them (a grey cabinet can score as "gas meter"). **It never claims a gas meter.** The detector also helps pick the meter: circles inside a detected meter rank first, and if the "cover" is implausibly small for the meter's enclosure (a round digit in the house number), the ruler is re-sized from the enclosure. `?objects=off` turns the detector off. Without it, the flow falls back to Base's fixed order.

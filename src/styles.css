@@ -106,3 +106,65 @@
 .ground-missing{position:absolute;height:34px;z-index:2;pointer-events:none;border-top:3px dashed #fbbf24;background:linear-gradient(#fbbf2433,#fbbf2400);display:flex;justify-content:center}
 .ground-missing span{margin-top:4px;background:#78350f;color:#fff;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px}
 .photo-goals ul{list-style:disc}
+/* Compact result card: verdict, one line to act on, chips; details on demand. */
+.meter-result.compact{margin-top:12px;padding:14px 16px}
+.result-line{display:flex;gap:8px;align-items:center}
+.result-line h3{margin:0;font-size:18px;line-height:1.25}
+.fix-line{margin:8px 0 0;font-size:17px;font-weight:600;line-height:1.35}
+.meter-result.rejected .fix-line{color:#9b1c1c}
+.meter-result.improve .fix-line{color:#8a4b00}
+.meter-result.accepted .fix-line{color:#23501c}
+.meter-result.improve{background:#fff8ea}
+.goal-chips{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:10px 0 12px}
+.goal-chips li{display:flex;gap:4px;align-items:center;font-size:12px;font-weight:600;padding:4px 9px 4px 7px;border-radius:12px;background:#fff;border:1px solid #dcdcd2}
+.goal-chips li.pass{color:#23501c;border-color:#b9d3ad}
+.goal-chips li.fail{color:#9b1c1c;border-color:#e8a39b;background:#fdf1ef}
+.goal-chips li.warn{color:#8a4b00;border-color:#f0c47a;background:#fff4e0}
+.goal-chips li.info{color:#1d4ed8;border-color:#bfd0f5}
+.all-checks .purpose{margin:8px 0;font-size:13px;color:#4b5563;line-height:1.45}
+.all-checks .goal-list{margin:6px 0;gap:6px}
+.all-checks .goal-list li{font-size:13px}
+.cant-step{display:block;margin:10px auto 0;text-decoration:underline;text-underline-offset:3px}
+.photo-goals{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:10px 12px}
+.photo-goals>span{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#4b5563}
+.photo-goals ul{list-style:none;display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:0}
+.photo-goals li{font-size:12px;padding:3px 9px;border-radius:12px;background:#fff;border:1px solid #dcdcd2}
+.photo-goals p{flex-basis:100%;margin:2px 0 0;font-size:12px}
+
+/* Phones, upright: camera near the top, no page chrome while taking photos. */
+@media(max-width:760px){
+  .app-shell.capturing{padding:0 12px}
+  .app-shell.capturing .site-header,.app-shell.capturing .journey,.app-shell.capturing .site-footer,.app-shell.capturing .checklist{display:none}
+  .capturing .capture-layout{gap:0}
+  .capturing .capture-topbar{margin:6px 0 2px}
+  .capturing .capture-topbar .text-button{min-height:34px;font-size:14px}
+  .capturing .capture-main>.eyebrow{display:none}
+  .capturing .capture-title{font-size:24px;letter-spacing:-.6px;margin:2px 0 4px}
+  .capturing .capture-instruction{font-size:14px;line-height:1.4;margin:0 0 8px}
+  .capturing .wall-steps{flex-wrap:nowrap;overflow-x:auto;margin-bottom:8px}
+  .capturing .wall-steps li{font-size:11px;padding:3px 8px 3px 3px;white-space:nowrap}
+  .capturing .live-checks{display:none}
+  .capturing .photo-goals{margin-top:8px}
+  .capturing .photo-goals p{display:none}
+  .capturing .model-status{margin:6px 0}
+  .capturing .capture-bottom{margin-top:10px}
+  .capturing .fix-line{font-size:16px}
+}
+/* Phones sideways (the wall photos): camera fills the height, everything else in a column beside it. */
+@media(orientation:landscape) and (max-height:520px){
+  .app-shell.capturing{padding:0 10px}
+  .app-shell.capturing .site-header,.app-shell.capturing .journey,.app-shell.capturing .site-footer,.app-shell.capturing .checklist{display:none}
+  .capturing main{margin:0}
+  .capturing .capture-layout{display:block}
+  .capturing .capture-main{display:grid;grid-template-columns:minmax(0,60%) minmax(0,1fr);column-gap:14px;align-content:start;padding-top:8px}
+  .capturing .capture-main>*{grid-column:2;min-width:0}
+  .capturing .capture-main>.camera-frame{grid-column:1;grid-row:1 / span 30;height:calc(100dvh - 16px);min-height:0;aspect-ratio:auto;position:sticky;top:8px;margin:0}
+  .capturing .capture-main>.eyebrow,.capturing .live-checks,.capturing .photo-goals p{display:none}
+  .capturing .capture-topbar{margin:0}
+  .capturing .capture-title{font-size:20px;margin:0 0 2px}
+  .capturing .capture-instruction{font-size:13px;line-height:1.35;margin:0 0 6px}
+  .capturing .wall-steps{margin-bottom:6px}.capturing .wall-steps li{font-size:11px;padding:2px 7px 2px 2px}
+  .capturing .meter-result.compact{margin-top:6px;padding:10px 12px}
+  .capturing .fix-line{font-size:15px}
+  .capturing .confirm-actions .button{padding:9px 10px;font-size:13px}
+}
