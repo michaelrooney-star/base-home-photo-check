@@ -40,7 +40,7 @@ function useLayout(nodes: PlanNodeVM[], containerWidth: number, isMobile: boolea
   // sizes
   const colGap = isMobile ? 28 : 40;
   const rowGap = isMobile ? 12 : 14;
-  const nodeW = isMobile ? Math.max(240, containerWidth - 24) : 150;
+  const nodeW = isMobile ? Math.max(240, containerWidth - 24) : 190;
   const nodeH = isMobile ? 52 : 44;
 
   const columns = isMobile ? 1 : 3;
@@ -228,6 +228,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
               width: layout.nodeW,
               }}
               aria-label={`${n.worker} ${visual.label}`}
+              title={`${workerLabel(n.worker)} — ${visual.label}`}
             data-node-id={n.id}
             >
             <span className="console-dag-pill-icon"><Icon size={16} className={visual.colorClass + (visual.spin ? ' animate-spin' : '')} /></span>

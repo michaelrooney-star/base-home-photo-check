@@ -119,13 +119,21 @@ Icons: Lucide (ISC). OpenCV.js: OpenCV Apache-2.0 distribution via `@techstark/o
 
 ---
 
-## PermitGraph (Track 2) — M0–M4 demo
+## Base Operations console
 
-The member app at `/` remains unchanged. PermitGraph adds Ops/Admin surfaces and a single Hono API:
+The member app at `/` remains unchanged. Base Operations adds client-case review, demo controls, and a single Hono API:
 
-- `/ops/:userId` — Ops queue and Case detail (Why? panel)
-- `/admin` — Admin harness (reset, inject failures, change sim hooks)
+- `/ops/:userId` — Client cases and case detail
+- `/admin` — Local demo controls for failure and conflict scenarios
+- `/admin/knowledge` — Rules library and jurisdiction-pack details
 - API: `/api/ops/*`, `/api/admin/*` — one Hono catch‑all with a shared in‑memory demo store
+
+The visible product language is intentionally Base-oriented:
+
+- **Base Operations** — the internal permit-review console.
+- **Client cases** — the work queue; each case combines site evidence, permit research, and a workflow plan.
+- **Demo controls** — local-only scenario tools, not production account administration.
+- **Rules library** — the jurisdiction packs and rules used to explain workflow decisions.
 
 Run locally:
 
@@ -147,12 +155,56 @@ Demo users:
 
 - `ops_maya`, `ops_sam` (different seeded queues)
 
+### Case statuses
+
+The API keeps stable status codes while the UI uses clearer operator language:
+
+| Code | UI label | Meaning |
+| --- | --- | --- |
+| `QUEUED` | Waiting to run | The case has not started processing. |
+| `OPS_READY` | Ready for review | The workflow completed and is ready for the next operator step. |
+| `NEEDS_REVIEW` | Review required | Evidence or rules conflict and a human decision is needed. |
+| `BLOCKED` | Blocked | A worker failed in a way that prevents the workflow from continuing. |
+| `UNKNOWN` | Setup needed | No verified jurisdiction/rules pack could be matched; the system fails closed. |
+
+`degraded: true` is a separate fallback flag. The UI presents it as **Fallback used** even when the underlying case status is `OPS_READY`.
+
+Transient workflow states include `PLANNED`, `RUNNING`, and `RECONCILING`. Worker states are `PENDING`, `RUNNING`, `DONE`, and `FAILED`.
+
+### Workflow graph
+
+The case detail graph is organized into waves:
+
+- **Wave 0:** Resolve pack
+- **Wave 1:** City review, Electrical, Fire safety, and Utility rules run in parallel
+- **Wave 2:** Reconcile combines the worker results
+
+Red connectors show the critical path through Resolve pack, Fire safety, Utility rules, and Reconcile. Gray connectors show supporting dependencies. Red does not mean failure; node icons and node outlines communicate state. Desktop nodes use state icons with tooltips, while mobile nodes show the state text. The accessible Plan list retains the full worker names and state labels.
+
+### Demo controls
+
+The `/admin` page is a local demo harness rather than a production administration area:
+
+- **Reset and reseed** restores the in-memory case store and clears scenario toggles.
+- **Simulate a fallback** makes future utility checks retry, fail, and use cached verified rules. The case then shows Fallback used/Degraded.
+- **Simulate a rule conflict** accepts a short or full case ID, reruns that case immediately, and makes Fire evidence conflict with the verified rules. The case becomes Review required.
+
+These controls affect only the local in-memory demo store. They do not call external utilities, change real permits, or persist across a process restart/cold start.
+
+### Queue behavior
+
+The Cases page uses manual refresh rather than polling. It shows the last successful update time and marks the list stale if refresh fails. Search and status filters are presentational; opening a case preserves the existing API and workflow behavior.
+
+### Site evidence
+
+Each seeded case includes seven mock customer-submitted photos: meter number, whole meter wall, left side, right side, breaker box, disconnect rating, and adjacent wall. Cases rotate through compact image sets so the site evidence varies without inflating the repository. The files under `public/images/cases` are resized JPEGs and total roughly 1–2 MB.
+
 Demo script (happy path + failure + conflict + gap):
 
-1. Case A — Austin happy: Open `/ops/ops_maya`, pick an Austin case → Plan → Status: Ops‑ready; Why? shows seed citations (high‑level, no invented setbacks).
-2. Case B — Utility fail: In `/admin`, enable “Kill utility worker” → Plan on any non‑Waco case → retries→fallback → Status: Ops‑ready · degraded.
-3. Case C — Fire conflict: In `/admin`, enter the Case ID (short or full) → “Mark conflict” → Plan → Status: Needs review.
-4. Waco — Open a Waco case → Pack: `UNKNOWN_PACK` → Status: Unknown (knowledge gap).
+1. Case A — Austin happy: Open `/ops/ops_maya`, choose a case marked Ready for review, and inspect its evidence, plan, and citations.
+2. Case B — Utility fallback: In `/admin`, enable the utility failure scenario, then run a queued case → retries → fallback → Fallback used.
+3. Case C — Rule conflict: In `/admin`, enter a short or full case ID and choose Run conflict → the case is immediately rerun → Review required.
+4. Waco — Open a Waco case → Rules pack: `UNKNOWN_PACK` → Setup needed (knowledge gap).
 
 Vercel caveats:
 

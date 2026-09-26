@@ -100,9 +100,15 @@ export function createApp() {
         body.killUtilityWorker;
     }
     if (body.addFireConflictCaseId) {
-      (await import('./store')).store.toggles.fireConflictCaseIds.add(
-        body.addFireConflictCaseId
+      const { store: demoStore } = await import('./store');
+      const matches = Array.from(demoStore.casesById.values()).filter((item) =>
+        item.id === body.addFireConflictCaseId || item.id.startsWith(body.addFireConflictCaseId!),
       );
+      if (matches.length !== 1) {
+        return c.json({ error: matches.length === 0 ? 'case_not_found' : 'case_id_ambiguous' }, 400);
+      }
+      demoStore.toggles.fireConflictCaseIds.add(matches[0].id);
+      return c.json({ ok: true, conflictCaseId: matches[0].id });
     }
     if (body.removeFireConflictCaseId) {
       (await import('./store')).store.toggles.fireConflictCaseIds.delete(

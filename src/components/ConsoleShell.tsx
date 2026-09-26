@@ -22,14 +22,25 @@ export function statusTone(status: string, degraded = false): StatusTone {
 }
 
 export function statusLabel(status: string) {
-  return status.replaceAll('_', ' ');
+  const labels: Record<string, string> = {
+    OPS_READY: 'Ready for review',
+    QUEUED: 'Waiting to run',
+    NEEDS_REVIEW: 'Review required',
+    BLOCKED: 'Blocked',
+    UNKNOWN: 'Setup needed',
+    PENDING: 'Waiting to run',
+    RUNNING: 'Running',
+    DONE: 'Complete',
+    FAILED: 'Failed',
+  };
+  return labels[status] ?? status.replaceAll('_', ' ');
 }
 
 function navItems(userId: string) {
   return [
-    { href: `/ops/${userId}`, label: 'Queue', icon: LayoutList },
-    { href: '/admin', label: 'Admin', icon: Settings2 },
-    { href: '/admin/knowledge', label: 'Knowledge', icon: BookOpen },
+    { href: `/ops/${userId}`, label: 'Cases', icon: LayoutList },
+    { href: '/admin', label: 'Demo controls', icon: Settings2 },
+    { href: '/admin/knowledge', label: 'Rules library', icon: BookOpen },
   ];
 }
 
@@ -42,7 +53,7 @@ export function ConsoleShell({ children, userId = 'ops_maya' }: ConsoleShellProp
     <div className="console-shell">
       <aside className="console-rail" aria-label="Console navigation">
         <Link to="/" className="console-brand" aria-label="Base Power home">base<span>.</span></Link>
-        <div className="console-rail-product">PermitGraph<br /><span>Operations console</span></div>
+        <div className="console-rail-product">Base Operations<br /><span>Permit review console</span></div>
         <span className="console-demo-badge">INTERACTIVE DEMO</span>
         <nav className="console-nav">
           {items.map(({ href, label, icon: Icon }) => (
@@ -57,7 +68,7 @@ export function ConsoleShell({ children, userId = 'ops_maya' }: ConsoleShellProp
       <div className="console-surface">
         <header className="console-topbar">
           <Link to="/" className="console-mobile-brand" aria-label="Base Power home">base<span>.</span></Link>
-          <div className="console-topbar-title"><strong>PermitGraph</strong><span>Operations console</span></div>
+          <div className="console-topbar-title"><strong>Base Operations</strong><span>Permit review console</span></div>
           <span className="console-env-badge">OPS DEMO · local store</span>
           <Link to="/" className="console-return-link">Photo check <ArrowRight size={15} /></Link>
         </header>
