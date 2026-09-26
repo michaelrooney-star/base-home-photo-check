@@ -59,14 +59,14 @@ export function makeActivationState(route: ActivationRoute, scenario: Activation
     g.externalRef = 'ERCOT-ADER-8841';
     g.issue = 'Premise identifier does not match the submitted registration record.';
     g.nextAction = 'Correct the premise identifier and resubmit.';
-    g.owner = 'ops_maya';
+    g.owner = 'base_admin';
     addEvent({ type: 'FEEDBACK', source: 'ERCOT', gateKey: g.key, message: g.issue, timestamp: now - day, acknowledged: false });
   }
   if (scenario === 'TELEMETRY_PENDING') {
     const g = activationGates.find((item) => item.key === 'TELEMETRY')!;
     g.status = 'SUBMITTED';
     g.externalRef = 'QSE-TEL-204';
-    g.owner = 'ops_maya';
+    g.owner = 'base_admin';
     g.nextAction = 'Wait for telemetry validation result.';
     addEvent({ type: 'FEEDBACK', source: 'QSE', gateKey: g.key, message: 'Telemetry package received and queued for validation.', timestamp: now - 3 * 60 * 60 * 1000, acknowledged: true, assignedOwner: g.owner });
   }
@@ -78,12 +78,13 @@ export function makeActivationState(route: ActivationRoute, scenario: Activation
   return { activationGates, externalEvents: events };
 }
 
-export function activationSummary(route: ActivationRoute, gates: ActivationGate[], now = Date.now()): ActivationSummary {
+export function activationSummary(route: ActivationRoute, gates: ActivationGate[], now = Date.now(), events: ExternalEvent[] = []): ActivationSummary {
   const current = gates.find((g) => g.status !== 'ACCEPTED');
   const correctionNeeded = gates.some((g) => g.status === 'QUESTIONS' || g.status === 'FAILED');
   const awaitingExternal = gates.some((g) => g.status === 'SUBMITTED');
   const telemetry = gates.find((g) => g.key === 'TELEMETRY');
   const dispatch = gates.find((g) => g.key === 'DISPATCH_QUALIFICATION');
+  const latest = events.slice().reverse().find((event) => event.type === 'FEEDBACK' || event.type === 'STATUS_CHANGED');
   return {
     route,
     currentGate: current?.key,
@@ -96,6 +97,8 @@ export function activationSummary(route: ActivationRoute, gates: ActivationGate[
     awaitingExternal,
     telemetryPending: Boolean(telemetry && telemetry.status !== 'ACCEPTED'),
     dispatchReady: Boolean(dispatch && dispatch.status === 'ACCEPTED'),
+    latestResponse: latest?.message,
+    latestResponseSource: latest?.source,
   };
 }
 
@@ -105,4 +108,3 @@ export function allowedGateStatus(status: ActivationGateStatus): ActivationGateS
   if (status === 'QUESTIONS' || status === 'FAILED') return ['SUBMITTED', 'ACCEPTED'];
   return ['ACCEPTED'];
 }
-

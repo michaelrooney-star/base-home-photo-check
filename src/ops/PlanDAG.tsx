@@ -21,6 +21,8 @@ export type PlanDAGProps = {
   selectedNodeId?: string | null;
 };
 
+const phaseLabels = ['Intake', 'Requirements checks', 'Decision'] as const;
+
 type Layout = {
   // pixel positions inside the svg viewport
   pos: Record<string, { x: number; y: number }>;
@@ -190,7 +192,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
                   pointerEvents: 'none',
                 }}
               >
-                WAVE {wIdx}
+                {phaseLabels[wIdx]}
               </div>
             ))}
           {isMobile &&
@@ -204,7 +206,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
                   pointerEvents: 'none',
                 }}
               >
-                WAVE {wIdx}
+                {phaseLabels[wIdx]}
               </div>
             ))}
 

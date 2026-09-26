@@ -18,12 +18,11 @@ export function createApp() {
   // Seed on first access
   app.get('/ops/queue/:userId', (c) => {
     seedDemoCases();
-    const { userId } = c.req.param();
-    const list = listCasesByAssignee(userId);
+    const list = listCasesByAssignee('base_admin');
     const cases = list
-      .map((item) => ({ ...item, activationSummary: activationSummary(item.activationRoute, item.activationGates) }))
+      .map((item) => ({ ...item, activationSummary: activationSummary(item.activationRoute, item.activationGates, Date.now(), item.externalEvents) }))
       .sort((a, b) => Number(b.activationSummary.overdue || b.activationSummary.correctionNeeded) - Number(a.activationSummary.overdue || a.activationSummary.correctionNeeded));
-    return c.json({ userId, cases });
+    return c.json({ userId: 'base_admin', cases });
   });
 
   app.get('/ops/cases/:caseId', async (c) => {
@@ -40,7 +39,7 @@ export function createApp() {
   app.post('/ops/cases', async (c) => {
     seedDemoCases();
     const body = (await c.req.json()) as CreateCaseBody;
-    const assignee = body.assignee ?? 'ops_maya';
+    const assignee = 'base_admin';
     const fp = {
       ...body.fingerprint,
       equipment_type: 'ESS' as const,

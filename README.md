@@ -130,7 +130,7 @@ The member app at `/` remains unchanged. Base Operations adds client-case review
 
 The visible product language is intentionally Base-oriented:
 
-- **Base Operations** — the internal permit-review console.
+- **Base Admin** — the single internal operations console used for this demo.
 - **Client cases** — the work queue; each case combines site evidence, permit research, and a workflow plan.
 - **Demo controls** — local-only scenario tools, not production account administration.
 - **Rules library** — the jurisdiction packs and rules used to explain workflow decisions.
@@ -151,9 +151,9 @@ npm test
 npm run build
 ```
 
-Demo users:
+Demo identity:
 
-- `ops_maya`, `ops_sam` (different seeded queues)
+- `base_admin` — one shared seeded queue; older `/ops/ops_maya` links remain compatible.
 
 ### Case statuses
 
@@ -201,7 +201,7 @@ Each seeded case includes seven mock customer-submitted photos: meter number, wh
 
 Demo script (happy path + failure + conflict + gap):
 
-1. Case A — Austin happy: Open `/ops/ops_maya`, choose a case marked Ready for review, and inspect its evidence, plan, and citations.
+1. Case A — Austin happy: Open `/ops/base_admin`, choose a case marked Ready for review, and inspect its evidence, plan, and citations.
 2. Case B — Utility fallback: In `/admin`, enable the utility failure scenario, then run a queued case → retries → fallback → Fallback used.
 3. Case C — Rule conflict: In `/admin`, enter a short or full case ID and choose Run conflict → the case is immediately rerun → Review required.
 4. Waco — Open a Waco case → Rules pack: `UNKNOWN_PACK` → Setup needed (knowledge gap).

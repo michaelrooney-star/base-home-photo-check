@@ -10,10 +10,31 @@ export function Admin() {
   const [caseId, setCaseId] = useState('');
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
-  async function load() { const res = await fetch('/api/admin/state'); setState(await res.json()); }
+  async function load() {
+    try {
+      const res = await fetch('/api/admin/state');
+      if (!res.ok) throw new Error(`Admin state request failed (${res.status})`);
+      setState(await res.json());
+      return true;
+    } catch {
+      setFeedback('The local API is unavailable. Restart the demo server, then try again.');
+      return false;
+    }
+  }
   useEffect(() => { void load(); }, []);
-  async function reset() { setBusy(true); await fetch('/api/admin/reset', { method: 'POST' }); await load(); setBusy(false); }
-  async function applyToggles() { setBusy(true); await fetch('/api/admin/toggles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ killUtilityWorker: utilityKill }) }); await load(); setBusy(false); }
+  async function reset() {
+    setBusy(true);
+    setFeedback('');
+    try {
+      const res = await fetch('/api/admin/reset', { method: 'POST' });
+      if (!res.ok) throw new Error(`Reset failed (${res.status})`);
+      const loaded = await load();
+      if (loaded) setFeedback('Demo store reset and reseeded successfully.');
+    } catch {
+      setFeedback('Reset failed because the local API is unavailable. Your existing data was not confirmed as changed.');
+    } finally { setBusy(false); }
+  }
+  async function applyToggles() { setBusy(true); try { const res = await fetch('/api/admin/toggles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ killUtilityWorker: utilityKill }) }); if (!res.ok) throw new Error(); await load(); } catch { setFeedback('Could not apply the scenario because the local API is unavailable.'); } finally { setBusy(false); } }
   async function injectFireConflict() {
     if (!caseId) return;
     setBusy(true);

@@ -9,7 +9,7 @@ import type { ActivationGateVM, ExternalEventVM } from './ActivationReadiness';
 
 type Finding = { domain: string; summary: string; citations: { label: string; url?: string }[]; requirement?: string; ruleIds?: string[] };
 type PlanNodeRaw = { id: string; worker: 'resolve_pack' | 'city' | 'electrical' | 'fire' | 'utility_rules' | 'reconcile'; wave: 0 | 1 | 2; dependsOn: string[]; state: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED'; result?: { status: 'ok' | 'failed'; attempts: number; error?: string; findings?: Finding[]; degraded?: boolean } };
-type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; county?: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[]; sitePhotos?: { id: string; title: string; src: string; note: string }[]; activationRoute: string; activationGates: ActivationGateVM[]; externalEvents: ExternalEventVM[] };
+type CaseRec = { id: string; assignee: string; pack: string; jobState: string; status: string; degraded: boolean; fingerprint: { address: string; city: string; county?: string; utility: string; service_amps: number }; why: Finding[]; plan: PlanNodeRaw[]; sitePhotos?: { id: string; title: string; src: string; note: string }[]; activationRoute: string; activationGates: ActivationGateVM[]; externalEvents: ExternalEventVM[]; followUpContact?: { organization: string; name: string; email?: string; phone?: string; url?: string; note?: string } };
 
 export function CaseDetail() {
   const { userId, caseId } = useParams();
@@ -46,12 +46,12 @@ export function CaseDetail() {
 
     <SiteEvidence photos={rec.sitePhotos ?? []} address={rec.fingerprint.address} onOpen={setSelectedPhoto} />
 
-    <div className="console-workflow-heading"><div><p className="console-eyebrow"><span /> WORKFLOW PLAN</p><h2>Research path</h2></div><span>Click a worker to inspect its evidence and run state.</span></div>
+    <div className="console-workflow-heading"><div><p className="console-eyebrow"><span /> WORKFLOW PHASES</p><h2>Workflow phases</h2></div><span>Select a phase to inspect its evidence and status.</span></div>
     <div className="console-workflow-card"><div className="console-dag"><PlanDAG nodes={vmNodes} onSelectNode={onSelectNode} selectedNodeId={selectedNodeId} /></div></div>
 
-    <ActivationReadiness caseId={rec.id} route={rec.activationRoute} gates={rec.activationGates} events={rec.externalEvents} onChange={load} />
+    <ActivationReadiness route={rec.activationRoute} gates={rec.activationGates} events={rec.externalEvents} followUpContact={rec.followUpContact} />
 
-    <details className="console-plan-list" role="group"><summary><span><strong>Plan list</strong><small>Accessible workflow summary</small></span><span>{rec.plan.length} workers</span></summary><ul>{rec.plan.map((n) => <li key={n.id}><button onClick={() => onSelectNode(n.id)}>{n.worker.replaceAll('_', ' ')}</button><span>Wave {n.wave}</span><StatusPill tone={n.state === 'DONE' ? 'ready' : n.state === 'FAILED' ? 'danger' : n.state === 'RUNNING' ? 'queued' : 'muted'}>{n.state === 'PENDING' ? 'Queued' : statusLabel(n.state)}</StatusPill></li>)}</ul></details>
+    <details className="console-plan-list" role="group"><summary><span><strong>Phase list</strong><small>Accessible workflow summary</small></span><span>{rec.plan.length} checks</span></summary><ul>{rec.plan.map((n) => <li key={n.id}><button onClick={() => onSelectNode(n.id)}>{n.worker.replaceAll('_', ' ')}</button><span>{phaseLabel(n.wave)}</span><StatusPill tone={n.state === 'DONE' ? 'ready' : n.state === 'FAILED' ? 'danger' : n.state === 'RUNNING' ? 'queued' : 'muted'}>{n.state === 'PENDING' ? 'Queued' : statusLabel(n.state)}</StatusPill></li>)}</ul></details>
 
     {selectedNode && <><aside className="console-detail-rail"><NodeDetail node={selectedNode} rec={rec} onClose={closeNode} /></aside><div className={`console-sheet-backdrop ${showSheet ? 'is-open' : ''}`} onClick={closeNode}><aside className={`console-detail-sheet ${showSheet ? 'is-open' : ''}`} onClick={(e) => e.stopPropagation()}><div className="console-sheet-handle" /><NodeDetail node={selectedNode} rec={rec} onClose={closeNode} /></aside></div></>}
     {selectedPhoto && <div className="console-photo-lightbox" role="dialog" aria-modal="true" aria-label={`${selectedPhoto.title} preview`} onClick={() => setSelectedPhoto(null)}><div className="console-photo-lightbox-card" onClick={(e) => e.stopPropagation()}><button className="console-icon-button" onClick={() => setSelectedPhoto(null)} aria-label="Close photo preview"><X size={18} /></button><img src={selectedPhoto.src} alt={selectedPhoto.title} /><div><h2>{selectedPhoto.title}</h2><p>{selectedPhoto.note}</p><span><MapPin size={13} /> {addressLabel(rec.fingerprint.address, rec.fingerprint.city)}</span></div></div></div>}
@@ -63,6 +63,7 @@ function SiteEvidence({ photos, address, onOpen }: { photos: { id: string; title
 }
 
 function addressLabel(address: string, city: string) { return `${address}, ${city}`; }
+function phaseLabel(wave: 0 | 1 | 2) { return ['Intake', 'Requirements checks', 'Decision'][wave]; }
 
 function NodeDetail({ node, rec, onClose }: { node: PlanNodeRaw; rec: CaseRec; onClose: () => void }) {
   const title = node.worker.replaceAll('_', ' ');

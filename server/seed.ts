@@ -141,6 +141,13 @@ function newCase(
   const activation = activationScenario
     ? makeActivationState(activationRoute, activationScenario)
     : { activationGates: [], externalEvents: [] };
+  const followUpContact = activationScenario
+    ? activationRoute === 'AUSTIN_UTILITY_MANAGED'
+      ? { organization: 'Austin Energy', name: 'Interconnection desk', email: 'austin-energy-demo@example.com', phone: '(512) 555-0136', url: 'https://www.austinenergy.com/', note: 'Demo contact — use the Austin Energy portal or official support route for the latest case status.' }
+      : { organization: 'ERCOT / QSE', name: 'ADER registration support', email: 'ercot-ader-demo@example.com', phone: '(512) 555-0148', url: 'https://www.ercot.com/', note: 'Demo contact — confirm the QSE contact and current ERCOT procedure before sending corrections.' }
+    : stage === 'BLOCKED' || stage === 'NEEDS_REVIEW'
+      ? { organization: fp.utility, name: 'Utility operations contact', email: 'utility-ops-demo@example.com', phone: '(512) 555-0152', url: fp.utility === 'Austin Energy' ? 'https://www.austinenergy.com/' : undefined, note: 'Demo contact — follow up on the blocked external requirement.' }
+      : undefined;
   return {
     id,
     created_at: Date.now(),
@@ -155,6 +162,7 @@ function newCase(
     sitePhotos: mockSitePhotos(photoSet),
     activationRoute,
     ...activation,
+    followUpContact,
   };
 }
 
@@ -210,7 +218,7 @@ export function seedDemoCases() {
       ['ERCOT_ADER', 'TELEMETRY_PENDING'],
       ['ERCOT_ADER', 'DISPATCH_READY'],
     ][i] as [CaseRecord['activationRoute'], ActivationScenario] | undefined;
-    const rec = newCase('ops_maya', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'DEGRADED', 'QUEUED', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED', activation?.[0], activation?.[1]);
+    const rec = newCase('base_admin', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'DEGRADED', 'QUEUED', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED', activation?.[0], activation?.[1]);
     cases.push(rec);
   }
 
@@ -222,7 +230,7 @@ export function seedDemoCases() {
       county: 'Williamson',
       utility: 'Oncor',
     });
-    const rec = newCase('ops_sam', fp, 'ROUNDROCK_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
+    const rec = newCase('base_admin', fp, 'ROUNDROCK_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
     cases.push(rec);
   }
 
@@ -234,7 +242,7 @@ export function seedDemoCases() {
       county: 'Dallas',
       utility: 'Oncor',
     });
-    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'DALLAS_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'NEEDS_REVIEW' : 'QUEUED');
+    const rec = newCase('base_admin', fp, 'DALLAS_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'NEEDS_REVIEW' : 'QUEUED');
     cases.push(rec);
   }
 
@@ -246,7 +254,7 @@ export function seedDemoCases() {
       county: 'Bexar',
       utility: 'CPS Energy',
     });
-    const rec = newCase('ops_sam', fp, 'SANANTONIO_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
+    const rec = newCase('base_admin', fp, 'SANANTONIO_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
     cases.push(rec);
   }
 
@@ -258,7 +266,7 @@ export function seedDemoCases() {
       county: 'Harris',
       utility: 'CenterPoint Energy',
     });
-    const rec = newCase('ops_maya', fp, 'HOUSTON_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'BLOCKED' : 'QUEUED');
+    const rec = newCase('base_admin', fp, 'HOUSTON_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'BLOCKED' : 'QUEUED');
     cases.push(rec);
   }
 
@@ -270,7 +278,7 @@ export function seedDemoCases() {
       county: 'McLennan',
       utility: '—',
     });
-    const rec = newCase(i % 2 === 0 ? 'ops_maya' : 'ops_sam', fp, 'UNKNOWN_PACK', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
+    const rec = newCase('base_admin', fp, 'UNKNOWN_PACK', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
     cases.push(rec);
   }
 

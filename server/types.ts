@@ -83,6 +83,17 @@ export type ActivationSummary = {
   awaitingExternal: boolean;
   telemetryPending: boolean;
   dispatchReady: boolean;
+  latestResponse?: string;
+  latestResponseSource?: ActivationSource;
+};
+
+export type FollowUpContact = {
+  organization: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  url?: string;
+  note?: string;
 };
 
 export type Citation = {
@@ -135,7 +146,7 @@ export type PlanNode = {
 export type CaseRecord = {
   id: string;
   created_at: number;
-  assignee: string; // ops_maya | ops_sam
+  assignee: string; // base_admin for the single-admin demo
   fingerprint: CaseFingerprint;
   pack: PackId;
   jobState: JobState;
@@ -147,6 +158,7 @@ export type CaseRecord = {
   activationRoute: ActivationRoute;
   activationGates: ActivationGate[];
   externalEvents: ExternalEvent[];
+  followUpContact?: FollowUpContact;
 };
 
 export type AdminToggles = {

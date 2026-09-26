@@ -32,10 +32,10 @@ describe('activation workflow', () => {
 
     const acknowledged = await app.request(`/api/ops/cases/${record.id}/activation/events/${feedback.id}/acknowledge`, { method: 'POST' });
     expect(acknowledged.status).toBe(200);
-    const assigned = await app.request(`/api/ops/cases/${record.id}/activation/gates/${gate.key}/assign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner: 'ops_sam' }) });
+    const assigned = await app.request(`/api/ops/cases/${record.id}/activation/gates/${gate.key}/assign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner: 'base_admin' }) });
     expect(assigned.status).toBe(200);
     const updated = await assigned.json();
-    expect(updated.activationGates.find((item: any) => item.key === gate.key).owner).toBe('ops_sam');
+    expect(updated.activationGates.find((item: any) => item.key === gate.key).owner).toBe('base_admin');
     expect(updated.externalEvents.some((item: any) => item.type === 'ACKNOWLEDGED')).toBe(true);
     expect(updated.externalEvents.some((item: any) => item.type === 'ASSIGNED')).toBe(true);
   });
