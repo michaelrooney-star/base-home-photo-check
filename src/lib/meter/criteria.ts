@@ -26,18 +26,20 @@ export const CRITERIA = {
   /** Share of blown-out pixels in the circle that counts as glare. */
   maxGlare: 0.025,
   /** Live preview focus is judged relative to the sharpest recent frame (works for phones and webcams alike)… */
-  minRelativeSharpness: 0.6,
+  minRelativeSharpness: 0.5,
   /** …with a low absolute floor (Laplacian variance, 256px crop) so a camera that never focuses isn't "sharp". */
   minLiveSharpness: 150,
   /** Laplacian variance of the saved photo (OCR-sized, ≤960px) below which it is too blurry for Base's reviewers.
    *  Only applied when the meter number could NOT be read: a confident read is the proof of legibility. */
   minSharpness: 40,
-  /** Mean frame-to-frame change (0–255) above which we ask the customer to hold steady. */
-  maxMotion: 6,
+  /** Frame-to-frame change (0–255, measured on shrunk frames: see metrics.motion) above which we say "hold steady".
+   *  Set for an older customer holding a phone at arm's length, not a webcam on a desk. */
+  maxMotion: 14,
   /** Minimum height of the meter number's characters in the saved photo, in pixels. */
   minDigitPx: 16,
-  /** Live guidance: consecutive good frames (~8/s) required before auto-capture. */
-  readyFrames: 6,
+  /** Live guidance: good frames needed among the last `readyWindow` (~8 frames/s) before auto-capture: 4 of 6 ≈ ¾ s. */
+  readyFrames: 4,
+  readyWindow: 6,
   /** Live guidance: how long a slow result (classifier / OCR) stays valid, ms. */
   freshMs: 3000,
   /** Rejections before offering "send anyway". */
@@ -71,13 +73,14 @@ export const MESSAGES = {
   // number
   notFound: 'We can’t find the meter number yet. Move closer so the meter fills the circle.',
   notFoundFinal: 'We couldn’t find the meter number. Move closer so the meter fills the circle, then try again.',
-  uncertain: 'Almost there — hold steady so we can read every digit.',
+  uncertain: 'Almost there — reading every digit…',
   uncertainFinal: 'We found the meter number but couldn’t read every digit. Move a little closer and hold steady.',
   small: 'Move a little closer so the meter number is easier to read.',
   cutOff: 'Part of the meter number is outside the photo. Keep the whole meter inside the circle.',
   obstructed: 'Something may be covering the meter number. Clear the view and try again.',
   // states
   loading: 'Getting ready…',
-  hold: 'Hold still — reading the meter number…',
+  hold: 'Reading the meter number…',
+  tapHint: 'Or tap the button to take the photo yourself.',
   ready: 'Looks good! Taking the photo…',
 } as const;

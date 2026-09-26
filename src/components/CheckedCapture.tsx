@@ -3,7 +3,8 @@ import { Check, CircleAlert, CircleCheck, ImagePlus, Info, Loader2, RotateCcw, S
 import { prewarmAnalyzer, prewarmDetector } from '../lib/meter/analyzer';
 import { grab, gray } from '../lib/meter/frames';
 import type { Gray } from '../lib/meter/image';
-import { createFocusTracker, FAST_SIZE, fastMetrics, type FastMetrics } from '../lib/meter/metrics';
+import { createFocusTracker, createSteadyWindow, FAST_SIZE, fastMetrics, type FastMetrics } from '../lib/meter/metrics';
+import { WALL_CRITERIA as Q } from '../lib/wall/criteria';
 import { analyzeStep } from '../lib/panel/analyze';
 import type { CheckedStep, StepResult } from '../lib/panel/steps';
 import type { Photo } from '../lib/photos';
@@ -33,10 +34,10 @@ const REJECTIONS_BEFORE_OVERRIDE = 2;
 function liveMessage(m: FastMetrics | null, good: number, step: CheckedStep): { tone: 'search' | 'adjust' | 'hold' | 'ready'; text: string } {
   if (!m) return { tone: 'search', text: 'Getting ready…' };
   if (m.luma < 45) return { tone: 'adjust', text: step === 'breaker' || step === 'rating' ? 'Too dark — turn on a light.' : 'Too dark — try in daylight.' };
-  if (m.motion > 6) return { tone: 'adjust', text: 'Hold steady.' };
-  if (m.relSharpness < 0.6 || m.sharpness < 150) return { tone: 'adjust', text: step === 'rating' ? 'Hold steady — let it focus.' : 'Hold steady a moment.' };
+  if (m.motion > Q.maxMotion) return { tone: 'adjust', text: 'Hold steady.' };
+  if (m.relSharpness < Q.minRelativeSharpness || m.sharpness < Q.minLiveSharpness) return { tone: 'adjust', text: step === 'rating' ? 'Hold steady — let it focus.' : 'Hold steady a moment.' };
   // For the rating we can't tell live whether the number is in the box, so don't show a green "ready".
-  return good >= 6 ? { tone: step === 'rating' ? 'hold' : 'ready', text: READY[step] } : { tone: 'hold', text: 'Hold steady.' };
+  return good >= Q.readyFrames ? { tone: step === 'rating' ? 'hold' : 'ready', text: READY[step] } : { tone: 'hold', text: 'Hold steady.' };
 }
 
 export function CheckedCapture({ camera, step, sample, extra, canUse = true, onAccept }: Props) {
@@ -67,13 +68,13 @@ export function CheckedCapture({ camera, step, sample, extra, canUse = true, onA
   useEffect(() => {
     if (phase !== 'live' || !camera.stream || !videoReady) return;
     let prev: Gray | null = null, good = 0;
-    const focus = createFocusTracker();
+    const focus = createFocusTracker(), steady = createSteadyWindow(Q.readyWindow);
     const tick = setInterval(() => {
       const v = video.current; if (!v || !v.videoWidth) return;
       const small = gray(grab(v, { x: 0, y: 0, w: v.videoWidth, h: v.videoHeight }, FAST_SIZE));
       const m = fastMetrics(small, prev); prev = small;
       m.relSharpness = focus(performance.now(), m.sharpness);
-      good = m.luma >= 45 && m.motion <= 6 && m.relSharpness >= 0.6 && m.sharpness >= 150 ? good + 1 : 0;
+      good = steady(m.luma >= Q.minLuma && m.motion <= Q.maxMotion && m.relSharpness >= Q.minRelativeSharpness && m.sharpness >= Q.minLiveSharpness);
       const next = liveMessage(m, good, step);
       setLive(p => (p.text === next.text && p.tone === next.tone ? p : next));
     }, 125);

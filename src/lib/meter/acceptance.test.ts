@@ -13,7 +13,15 @@ const failed = (e: PhotoEvidence) => decide(e).checks.filter(c => c.state !== 'p
 describe('decide (final accept/reject)', () => {
   it('accepts an electric meter with a readable number', () => { expect(decide(good)).toMatchObject({ accepted: true, meterNumber: '149 214 094', reasons: [] }); });
   it('rejects a gas meter and says so', () => { const d = decide({ ...good, subject: gas }); expect(d.accepted).toBe(false); expect(d.reasons[0]).toBe(MESSAGES.gas); });
-  it('rejects when the classifier could not run', () => { expect(failed({ ...good, subject: { status: 'unavailable' } })).toEqual(['subject']); });
+  it('does not block a readable meter when recognition could not run (older phones), but marks it unchecked', () => {
+    const d = decide({ ...good, subject: { status: 'unavailable' } });
+    expect(d.accepted).toBe(true);
+    expect(d.checks.find(c => c.id === 'subject')).toMatchObject({ state: 'skipped' });
+    expect(decide({ ...good, subject: { status: 'loading' } }).accepted).toBe(true);
+  });
+  it('still needs recognition when the number could not be read', () => {
+    expect(decide({ ...good, subject: { status: 'unavailable' }, reading: { ...readable, all_characters_certain: false } }).accepted).toBe(false);
+  });
   it('rejects dark photos even if the number was read', () => { expect(failed({ ...good, luma: 20 })).toEqual(['light']); });
   it('ignores glare when the number is readable, but reports it when it is not', () => {
     expect(decide({ ...good, glare: 0.2 }).accepted).toBe(true);
@@ -46,7 +54,8 @@ describe('guide (live instructions)', () => {
     expect(guide({ ...base, fast: { ...base.fast!, sharpness: 60, relSharpness: 1 } }).message).toBe(MESSAGES.blurry);
   });
   it('does not capture on stale readings', () => { expect(guide({ ...base, now: 20_000 }).capture).toBe(false); });
-  it('does not capture before the classifier has answered', () => { expect(guide({ ...base, subject: null }).capture).toBe(false); });
+  it('captures a readable number without waiting for meter recognition to load (checked again on the photo)', () => { expect(guide({ ...base, subject: null }).capture).toBe(true); });
+  it('never shows “hold steady” while it is only reading the number', () => { expect(guide({ ...base, reading: null }).message).toBe(MESSAGES.hold); expect(MESSAGES.hold).not.toMatch(/steady|still/i); });
 });
 
 describe('aggregate', () => {

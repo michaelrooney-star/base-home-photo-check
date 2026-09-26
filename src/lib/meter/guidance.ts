@@ -51,7 +51,7 @@ export function guide(i: LiveInput): Guidance {
   if (!obs.number_fully_in_frame) return out('adjust', MESSAGES.cutOff);
   if (!obs.all_characters_certain) return out('hold', MESSAGES.uncertain);
   if (!bigEnough) return out('adjust', MESSAGES.small);
-  // Number is readable. Capture once the subject is confirmed (or can't be checked — the final check will say so).
-  if (subject.status === 'loading') return out('hold', MESSAGES.hold);
+  // Number is readable. Capture without waiting for meter recognition to finish loading: the saved photo is checked
+  // again, and if recognition still isn't available it's marked for reviewers rather than rejected.
   return i.goodFrames >= CRITERIA.readyFrames ? out('ready', MESSAGES.ready, true) : out('hold', MESSAGES.hold);
 }

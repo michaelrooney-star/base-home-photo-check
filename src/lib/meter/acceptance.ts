@@ -7,7 +7,7 @@ export type SubjectResult =
   | { status: 'loading' }
   | { status: 'unavailable'; error?: string };
 
-export type Check = { id: CheckId; label: string; state: 'pass' | 'fail' | 'pending'; message?: string };
+export type Check = { id: CheckId; label: string; state: 'pass' | 'fail' | 'pending' | 'skipped'; message?: string };
 export type PhotoEvidence = {
   subject: SubjectResult;
   reading: MeterObservation;
@@ -34,7 +34,7 @@ export function decide(e: PhotoEvidence): Decision {
   const digitPx = r.number_height_ratio * e.regionHeightPx;
   const check = (id: CheckId, ok: boolean, message: string): Check => ({ id, label: CHECK_LABELS[id], state: ok ? 'pass' : 'fail', message: ok ? undefined : message });
   const checks: Check[] = [
-    subjectCheck(e.subject),
+    e.subject.status === 'ok' || !readable ? subjectCheck(e.subject) : { id: 'subject', label: `${CHECK_LABELS.subject} (not checked)`, state: 'skipped' as const },
     check('light', e.luma >= CRITERIA.minLuma, MESSAGES.dark),
     // Glare and softness only matter if they stop us reading the number.
     check('glare', readable || e.glare <= CRITERIA.maxGlare, MESSAGES.glare),
@@ -44,6 +44,8 @@ export function decide(e: PhotoEvidence): Decision {
     check('framing', r.number_fully_in_frame, MESSAGES.cutOff),
     check('clear', !r.issues.includes('obstructed') && !r.issues.includes('truncated'), MESSAGES.obstructed),
   ];
-  const failed = checks.filter(c => c.state !== 'pass');
+  // Recognition that couldn't run (e.g. the model didn't load on an older phone) doesn't block a photo whose meter number
+  // we could read; the photo is marked for Base's reviewers instead.
+  const failed = checks.filter(c => c.state === 'fail' || c.state === 'pending');
   return { accepted: failed.length === 0, meterNumber: readable ? r.meter_number : null, checks, reasons: [...new Set(failed.map(c => c.message ?? c.label))] };
 }
