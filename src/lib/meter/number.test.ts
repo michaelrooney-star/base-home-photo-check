@@ -33,5 +33,17 @@ describe('pickMeterNumber', () => {
     expect(r.issues).toContain('obstructed');
   });
   it('flags a number touching the edge of the photo', () => { expect(pickMeterNumber([line('149214094', 0, 160, 120, 180)], img()).number_fully_in_frame).toBe(false); });
+  it('prefers the full number over a partial duplicate reading of it (webcam capture)', () => {
+    // The partial line has a taller box, which used to outrank the full number and then trip the truncation check.
+    const r = pickMeterNumber([line('149214', 140, 150, 220, 185, 0.86), line('149214094', 140, 160, 260, 180, 1)], img());
+    expect(r).toMatchObject({ meter_number: '149214094', all_characters_certain: true, issues: [] });
+  });
+  it('joins a spaced number the OCR split into separate boxes', () => {
+    const r = pickMeterNumber([line('149', 140, 160, 175, 180), line('214', 185, 160, 220, 180), line('094', 230, 161, 265, 181)], img());
+    expect(r).toMatchObject({ meter_number: '149 214 094', all_characters_certain: true });
+  });
+  it('does not join text on a different row', () => {
+    expect(pickMeterNumber([line('149214', 140, 160, 220, 180), line('094', 230, 200, 265, 220)], img()).meter_number).toBe('149214');
+  });
   it('reports nothing when there is no plausible number', () => { expect(pickMeterNumber([line('4094', 140, 160, 200, 180), line('CLS', 10, 10, 50, 30)], img()).meter_number_visible).toBe(false); });
 });
