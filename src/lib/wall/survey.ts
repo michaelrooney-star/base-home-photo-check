@@ -3,7 +3,7 @@
 // Like a technician, we look along the wall on the more promising side first and stop once a spot is found.
 // Never more photos than Base's list (whole wall, right, left); often fewer. Pure; unit-tested.
 import type { Photos } from '../photos.ts';
-import { describeSpace, withArticle, type BlockerKind, type Side, type SpaceFinding } from './space.ts';
+import { describeSpace, type BlockerKind, type Side, type SpaceFinding } from './space.ts';
 
 /** What a wall photo's clear-space check found, saved with the photo (PhotoCheck.space). */
 export type SpaceSummary = {
@@ -51,7 +51,7 @@ export function planWall(photos: Photos): WallPlan {
     if (done(photos, s)) plan.notNeeded[other(s)] = `Open wall found to the ${s} of the meter`;
     else {
       plan.todo = [s];
-      plan.hints[s] = `We spotted open wall to the ${s} of your meter. Stand back and face along the wall to the ${s}, so we can see the ground in front of it.`;
+      plan.hints[s] = `Open wall to the ${s}! Face along it and show the ground.`;
       plan.notNeeded[other(s)] = `Open wall found to the ${s} of the meter`;
     }
     plan.notNeeded.adjacent = 'Open wall found near the meter';
@@ -60,19 +60,15 @@ export function planWall(photos: Photos): WallPlan {
   }
 
   const crowd = (s: Side) => wall.nearest[s]?.name;
-  const past = (s: Side) => (crowd(s) ? ` past the ${crowd(s)}` : '');
-  const intro = crowd('left') || crowd('right')
-    ? `Your meter has ${[crowd('left') && `${withArticle(crowd('left')!)} on the left`, crowd('right') && `${withArticle(crowd('right')!)} on the right`].filter(Boolean).join(' and ')}. `
-    : '';
   const order: Side[] = [first, other(first)];
   plan.todo = order.filter(s => !done(photos, s));
-  if (plan.todo.length === 2) plan.hints[first] = `${intro}Let’s look for open wall: face along the wall to the ${first} and step back so we can see${past(first) || ' the wall and ground beside it'}.`;
+  if (plan.todo.length === 2) plan.hints[first] = `Face along the wall to the ${first}. ${crowd(first) ? `Step back to see past the ${crowd(first)}.` : 'Show the wall and ground.'}`;
   if (plan.todo.length === 1) {
     const s = plan.todo[0];
-    plan.hints[s] = `No open wall to the ${other(s)} so far. Now face along the wall to the ${s} and step back so we can see${past(s) || ' the wall and ground beside it'}.`;
+    plan.hints[s] = `Nothing open on the ${other(s)}. Try the ${s}${crowd(s) ? `, past the ${crowd(s)}` : ''}.`;
   }
   if (sidesTaken.length === 2) {
-    plan.hints.adjacent = 'Your meter wall looks crowded. The wall around the nearest corner may have room — show it from corner to corner.';
+    plan.hints.adjacent = 'Crowded here — try the wall around the corner.';
     plan.summary = `No clear 3 ft stretch of wall seen near the meter. ${wall.text}`;
   }
   return plan;

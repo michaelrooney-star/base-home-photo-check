@@ -17,14 +17,13 @@ describe('planWall', () => {
     const p = planWall({ wall: photo(openLeft) });
     expect(p.todo).toEqual(['left']);
     expect(p.notNeeded.right).toBeTruthy();
-    expect(p.hints.left).toMatch(/open wall to the left/);
+    expect(p.hints.left).toMatch(/Open wall to the left/);
     expect(p.summary).toMatch(/4\+ ft of clear wall left/);
   });
   it('crowded meter: looks along the side with more clear wall first, naming what is in the way', () => {
     const p = planWall({ wall: photo(crowded) });
     expect(p.todo).toEqual(['left', 'right']);
-    expect(p.hints.left).toMatch(/has an electrical box on the left and a large cabinet on the right/);
-    expect(p.hints.left).toMatch(/past the electrical box/);
+    expect(p.hints.left).toBe('Face along the wall to the left. Step back to see past the electrical box.');
   });
   it('stops as soon as a side photo shows open wall', () => {
     const p = planWall({ wall: photo(crowded), left: photo(sideSpot('left')) });
@@ -35,10 +34,10 @@ describe('planWall', () => {
   it('tries the other side, then points to the adjacent wall', () => {
     const one = planWall({ wall: photo(crowded), left: photo(sideNone('left')) });
     expect(one.todo).toEqual(['right']);
-    expect(one.hints.right).toMatch(/No open wall to the left so far.*past the large cabinet/);
+    expect(one.hints.right).toBe('Nothing open on the left. Try the right, past the large cabinet.');
     const both = planWall({ wall: photo(crowded), left: photo(sideNone('left')), right: photo(sideNone('right')) });
     expect(both.todo).toEqual([]);
-    expect(both.hints.adjacent).toMatch(/around the nearest corner/);
+    expect(both.hints.adjacent).toMatch(/around the corner/);
     expect(both.summary).toMatch(/No clear 3 ft stretch/);
   });
 });

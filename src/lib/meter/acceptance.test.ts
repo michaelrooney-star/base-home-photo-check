@@ -19,8 +19,18 @@ describe('decide (final accept/reject)', () => {
     expect(d.checks.find(c => c.id === 'subject')).toMatchObject({ state: 'skipped' });
     expect(decide({ ...good, subject: { status: 'loading' } }).accepted).toBe(true);
   });
-  it('still needs recognition when the number could not be read', () => {
-    expect(decide({ ...good, subject: { status: 'unavailable' }, reading: { ...readable, all_characters_certain: false } }).accepted).toBe(false);
+  it('accepts a clear photo whose number was seen but not confirmed, for Base to read (not a retake)', () => {
+    const d = decide({ ...good, reading: { ...readable, all_characters_certain: false } });
+    expect(d).toMatchObject({ accepted: true, review: true, meterNumber: null, guess: '149 214 094' });
+    expect(decide({ ...good, subject: { status: 'unavailable' }, reading: { ...readable, all_characters_certain: false } }).accepted).toBe(true);
+  });
+  it('but still asks for a retake when the photo is the problem or no number is in view', () => {
+    const unsure = { ...readable, all_characters_certain: false };
+    expect(decide({ ...good, sharpness: 5, reading: unsure }).accepted).toBe(false);
+    expect(decide({ ...good, luma: 20, reading: unsure }).accepted).toBe(false);
+    expect(decide({ ...good, reading: { ...unsure, issues: ['truncated'] } }).accepted).toBe(false);
+    expect(decide({ ...good, reading: { ...unsure, meter_number_visible: false, meter_number: '' } }).accepted).toBe(false);
+    expect(decide({ ...good, subject: gas, reading: unsure }).accepted).toBe(false);
   });
   it('rejects dark photos even if the number was read', () => { expect(failed({ ...good, luma: 20 })).toEqual(['light']); });
   it('ignores glare when the number is readable, but reports it when it is not', () => {
@@ -40,18 +50,21 @@ describe('decide (final accept/reject)', () => {
 describe('guide (live instructions)', () => {
   const base: LiveInput = { now: 10_000, fast: { luma: 180, sharpness: 4000, relSharpness: 1, glare: 0, motion: 1 }, goodFrames: 10, subject: { result: electric, at: 9_500 }, reading: { obs: readable, at: 9_500, regionHeightPx: 1000 } };
   it('captures when everything is good', () => { expect(guide(base)).toMatchObject({ tone: 'ready', capture: true }); });
-  it('waits for enough steady frames', () => { expect(guide({ ...base, goodFrames: 2 })).toMatchObject({ tone: 'hold', capture: false }); });
+  it('captures as soon as two reads agree, even if the phone wobbles right now (the best read frame is saved)', () => {
+    expect(guide({ ...base, goodFrames: 0, fast: { ...base.fast!, motion: 30, relSharpness: 0.2 } })).toMatchObject({ tone: 'ready', capture: true });
+  });
+  it('still needs light to capture', () => { expect(guide({ ...base, fast: { ...base.fast!, luma: 10 } }).capture).toBe(false); });
   it('gives one instruction, most important first', () => {
     expect(guide({ ...base, fast: { ...base.fast!, luma: 10, motion: 20 } }).message).toBe(MESSAGES.dark);
     expect(guide({ ...base, subject: { result: gas, at: 9_500 } }).message).toBe(MESSAGES.gas);
-    expect(guide({ ...base, fast: { ...base.fast!, motion: 20 } }).message).toBe(MESSAGES.steady);
+    expect(guide({ ...base, reading: null, fast: { ...base.fast!, motion: 20 } }).message).toBe(MESSAGES.steady);
     expect(guide({ ...base, reading: { ...base.reading!, obs: { ...readable, meter_number_visible: false } } }).message).toBe(MESSAGES.notFound);
     expect(guide({ ...base, reading: { ...base.reading!, regionHeightPx: 300 } }).message).toBe(MESSAGES.small);
   });
   it('judges focus relative to the camera’s recent best (soft webcams still get ready)', () => {
     expect(guide({ ...base, fast: { ...base.fast!, sharpness: 400, relSharpness: 0.95 } }).tone).toBe('ready');
-    expect(guide({ ...base, fast: { ...base.fast!, sharpness: 400, relSharpness: 0.3 } }).message).toBe(MESSAGES.blurry);
-    expect(guide({ ...base, fast: { ...base.fast!, sharpness: 60, relSharpness: 1 } }).message).toBe(MESSAGES.blurry);
+    expect(guide({ ...base, reading: null, fast: { ...base.fast!, sharpness: 400, relSharpness: 0.3 } }).message).toBe(MESSAGES.blurry);
+    expect(guide({ ...base, reading: null, fast: { ...base.fast!, sharpness: 60, relSharpness: 1 } }).message).toBe(MESSAGES.blurry);
   });
   it('does not capture on stale readings', () => { expect(guide({ ...base, now: 20_000 }).capture).toBe(false); });
   it('captures a readable number without waiting for meter recognition to load (checked again on the photo)', () => { expect(guide({ ...base, subject: null }).capture).toBe(true); });

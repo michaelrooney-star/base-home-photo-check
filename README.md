@@ -283,3 +283,39 @@ Tuned after a test on iPhones at a real meter, where "Hold steady" never cleared
 - **"Hold steady" only means movement.** While the number is being read, the banner says "Reading the meter number…".
 - **Auto-capture doesn't wait for meter recognition** (about 150 MB, which can be slow or fail on an iPhone). The saved photo waits at most 8 s for it. If recognition still isn't available, a photo with a readable meter number is accepted and marked "not checked" for reviewers; before, it was rejected.
 - **After 5 s,** "Or tap the button to take the photo yourself." appears above the shutter.
+
+## Meter photo: best read frame, full resolution, camera-app fallback
+
+A photo taken in the app is a frame of the live camera preview, not a photo from the iPhone's Camera app. It's smaller and more compressed, without the Camera app's processing. After an iPhone field test where numbers weren't being read:
+
+- **The saved photo is the best frame the reader actually read.** Each live pass freezes the guide-circle area at full camera resolution and reads it. Frames where every digit was certain are kept for 3 s (`src/lib/meter/best.ts`). On capture, automatic or tapped, the app saves the sharpest kept frame that matches the number read twice. Before, it saved whatever frame was on screen, which could be the one that wobbled. If the final check is less sure than the live read of the same frame, it uses the live read.
+- **Highest camera resolution:** the app asks for up to 3840×2160 (was 1920×1440).
+- **Camera-app fallback:** a rejected meter photo offers "Use your camera app instead", which opens the phone's own camera and checks that full-quality photo the same way. It isn't shown on the live preview, to keep the screen clear.
+- **Diagnostics with each meter photo,** in the reviewer notes, e.g. "Capture: camera 3840×2160 · best of 4 recent frames · digits 37 px · sharpness 372". A field test then shows what the phone delivered without a debug view.
+
+**Auto-capture fires as soon as two reads agree.** The saved photo is the best frame that was actually read, so the phone doesn't also have to be steady at that instant; only the light check still applies.
+
+**Less on screen.** Messages are a few words ("Move closer.", "Glare — step to one side.", "Tilt down to show the ground."). The meter step no longer shows the live checklist chips, the tap hint or the model-status line once loaded. Its result card matches the other steps: a verdict, one line, Meter · Number · Clear photo chips, and the full checks under "Details". Step instructions and survey hints are one short sentence.
+
+## Reading real meter numbers (format-agnostic)
+
+The first number reader was tuned on one Oncor sample, where the number is a big standalone "149 214 094". It failed on real Austin Energy meters: their number is printed "AE 6136370", with a letter prefix, and shares the plate with other long numbers (serial, barcode caption, "K=0.15 …"). It either rejected the number or picked a different one. `src/lib/meter/number.ts` now works without knowing any utility's format:
+
+- **Candidates:** any run of 6–14 digits, optionally printed in short groups, not glued to other letters or digits, with an optional 2–3 letter prefix. Spec text like "FORM 2S CL320 240V" or "0014158E" doesn't qualify.
+- **Evidence, scored rather than pass/fail:**
+  - the same number repeated elsewhere on the plate (a barcode caption like "KZAAE61068922016"): strong evidence;
+  - a letter prefix;
+  - read at both sizes;
+  - on the white nameplate (not an LCD);
+  - not a spec value after "=".
+  
+  A caption that extends the number by 1–3 digits means we're seeing only part of it ("truncated").
+- **Two sizes:** the final check reads the photo at 960 px and 1600 px and the reads vote. A one-digit disagreement between sizes counts as a misread of the same text, not a rival number. A misread prefix ("BE") is corrected from the caption ("…AE6106892…").
+- **"Certain"** only when the winner is read confidently and clearly beats every other number on the plate.
+
+**Clear photos aren't rejected for an unconfirmed number.** If the photo is sharp, bright and well framed, and the number is in view but not every digit is confirmed, it's accepted with "Clear photo — Base will read the number" and a note for reviewers with our best reading. Retakes are for bad photos: dark, blurry, cut off, covered, the wrong object, or no number in view.
+
+**Auto-capture** no longer needs a confirmed read: it takes the photo once the number is in view, close enough and the phone steady, or immediately when two reads agree.
+
+`eval/meter` now includes the two real Austin Energy close-ups and the same meters cropped to the guide circle: **23/23**, with no false accepts and no wrong numbers. Before this change, the real meters failed. In a browser with a simulated camera at 1280×720, the Oncor sample and both Austin meters were each captured and read correctly within 5–9 s.
+

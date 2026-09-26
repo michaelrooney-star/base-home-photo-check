@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeDetections, letterbox, toTensor, WALL_OBJECT_CLASSES, type Detection } from './objects';
-import { checkRuler, customerSpaceText, describeSpace, findSpace, greenProfile, plantBand } from './space';
+import { batteryTemplate, checkRuler, customerSpaceText, describeSpace, findSpace, greenProfile, noRoomLine, plantBand } from './space';
 
 describe('detector input and output', () => {
   it('letterboxes a landscape photo into 640×640 with grey bars top and bottom', () => {
@@ -56,6 +56,7 @@ describe('findSpace', () => {
       detections: [det('ac', 0.08, 0.19, 0.54, 0.73), det('box', 0.67, 1, 0.32, 0.87)],
     });
     expect(customerSpaceText(f)).toBe('There’s an AC unit on the left and a large cabinet on the right of your meter. Next, we’ll look along the wall for open space.');
+    expect(noRoomLine(f)).toBe('No room by the meter: an AC unit on the left and a large cabinet on the right. We’ll check along the wall next.');
   });
   it('re-sizes the ruler from the meter enclosure when a round digit was picked instead of the glass cover', () => {
     const box = det('meter', 0.4, 0.51, 0.33, 0.57);
@@ -90,5 +91,15 @@ describe('findSpace', () => {
     const f = findSpace({ meter, width: W, height: H, mode: 'wall', green, detections: [] });
     expect(f.nearest.right?.kind).toBe('plants');
     expect(f.nearest.left).toBeUndefined();
+  });
+  it('draws a to-scale battery with 3 ft either side (≈9 ft), and says whether it fits', () => {
+    const meter = { x: 0.2, y: 0.3, r: 0.02, source: 'auto' as const }; // cover 7 in = 0.04 of height → 1 ft ≈ 0.069 of height
+    const open = findSpace({ meter, width: 2000, height: 1500, mode: 'wall', green: [], detections: [] });
+    const t = batteryTemplate(open, meter, 2000, 1500)!;
+    const ftShareOfWidth = (0.04 * 1500 / 7 * 12) / 2000;
+    expect((t.x1 - t.x0) / ftShareOfWidth).toBeCloseTo(38 / 12 + 6, 1);
+    expect(t.fits).toBe(true);
+    const crowded = findSpace({ meter, width: 2000, height: 1500, mode: 'wall', green: [], detections: [det('box', 0.55, 0.62, 0.5, 0.7)] });
+    expect(batteryTemplate(crowded, meter, 2000, 1500)!.fits).toBe(false);
   });
 });

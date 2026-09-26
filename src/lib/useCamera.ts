@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pickWideLens, type WideLens } from './lens';
 
-const BACK: MediaTrackConstraints = { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } };
+// Ask for as much resolution as the camera offers (iPhones give up to 4K): the meter's printed number is small.
+const SIZE: MediaTrackConstraints = { width: { ideal: 3840 }, height: { ideal: 2160 } };
+const BACK: MediaTrackConstraints = { facingMode: { ideal: 'environment' }, ...SIZE };
 
 export function useCamera() {
   const streamRef = useRef<MediaStream | null>(null);
@@ -43,7 +45,7 @@ export function useCamera() {
       try { await track.applyConstraints({ advanced: [{ zoom: wide ? option.zoom : 1 } as MediaTrackConstraintSet] }); setLens({ option, wide }); } catch { /* keep current zoom */ }
       return;
     }
-    const next = await open(wide ? { deviceId: { exact: option.deviceId }, width: { ideal: 1920 }, height: { ideal: 1440 } } : BACK);
+    const next = await open(wide ? { deviceId: { exact: option.deviceId }, ...SIZE } : BACK);
     if (next) setLens({ option, wide });
     else if (wide) { await open(BACK); setLens({ option: null, wide: false }); } // that camera wouldn't open: stop offering it
   }, [lens, open]);

@@ -7,7 +7,7 @@ import { createFocusTracker, createSteadyWindow, FAST_SIZE, fastMetrics } from '
 import { guideWall, spaceLimitedOnly, wallInFocus, type MeterSpot, type WallCheck, type WallDecision, type WallGuidance, type WallLive } from '../lib/wall/assess';
 import { shortFix, WALL_CRITERIA, WALL_MESSAGES, WALL_SEQUENCE, type SceneClass, type WallMode } from '../lib/wall/criteria';
 import { analyzeWallPhoto, decide, measureSpace, spotFromTap, withRuler, type WallAnalysis } from '../lib/wall/locate';
-import { customerSpaceText, type SpaceFinding } from '../lib/wall/space';
+import { batteryTemplate, customerSpaceText, noRoomLine, type SpaceFinding } from '../lib/wall/space';
 import { cantSeePast, summarizeSpace } from '../lib/wall/survey';
 import type { useCamera } from '../lib/useCamera';
 import type { Photo } from '../lib/photos';
@@ -191,6 +191,17 @@ export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnow
         {phase === 'tap' && ring({ ...cursor, r: null }, 'cursor')}
         {phase === 'result' && ring(spot, d?.accepted ? 'good' : 'placed')}
         {phase === 'result' && photoRect && d?.checks.some(c => c.id === 'ground' && c.state === 'fail') && <div className="ground-missing" aria-hidden="true" style={{ left: photoRect.x, width: photoRect.w, top: photoRect.y + photoRect.h - 64 }}><span>↓ Ground not in the photo</span></div>}
+        {phase === 'result' && mode === 'wall' && space && spot && photoRect && (() => {
+          // To scale: a battery and its 3 ft side clearances, drawn only where it fits. When it doesn't, the outlined
+          // objects and one line on the card say what's in the way — a big empty box told people nothing.
+          const t = batteryTemplate(space, spot, analysis!.img.naturalWidth, analysis!.img.naturalHeight); if (!t?.fits) return null;
+          const L = (v: number) => `${Math.max(0, v) * 100}%`, Wd = (a: number, b: number) => `${(Math.min(1, b) - Math.max(0, a)) * 100}%`;
+          return <div className="battery-template fits" aria-hidden="true" style={{ left: photoRect.x, top: photoRect.y, width: photoRect.w, height: photoRect.h }}>
+            <span className="bt-clear" style={{ left: L(t.x0), width: Wd(t.x0, t.bx0), top: L(t.top), height: `${(t.ground - t.top) * 100}%` }} />
+            <span className="bt-clear" style={{ left: L(t.bx1), width: Wd(t.bx1, t.x1), top: L(t.top), height: `${(t.ground - t.top) * 100}%` }} />
+            <span className="bt-box" style={{ left: L(t.bx0), width: Wd(t.bx0, t.bx1), top: L(t.top), height: `${(t.ground - t.top) * 100}%` }}><em>Battery fits here</em></span>
+          </div>;
+        })()}
         {phase === 'result' && space && spot && photoRect && <div className="space-marks" aria-hidden="true" style={{ left: photoRect.x, top: photoRect.y, width: photoRect.w, height: photoRect.h }}>
           {/* What's in the way, outlined where it is in the photo; the open stretch of wall, shaded green from meter height down. */}
           {space.blockers.filter(b => b.kind !== 'meter' && space.sides.includes(b.x1 <= spot!.x ? 'left' : 'right')).map((b, i) =>
@@ -263,7 +274,7 @@ export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnow
         : d.limitedSpace ? 'Noted: you couldn’t step back further.'
         : improve ? `Step back to see past the ${blocker ?? 'meter'}.${lens}`
         : space?.spot ? `About ${Math.round(space.spot.ft!)}${space.spot.open ? '+' : ''} ft of open wall on the ${space.spot.side}.`
-        : mode === 'wall' && space ? 'Crowded near the meter — we’ll look along the wall next.'
+        : mode === 'wall' && space ? noRoomLine(space)
         : spotKnown && mode !== 'wall' ? 'This shows the ground in front of the open wall.'
         : null;
       return <div ref={resultRef} className={`meter-result compact ${d.accepted ? (improve ? 'improve' : 'accepted') : 'rejected'}`}>

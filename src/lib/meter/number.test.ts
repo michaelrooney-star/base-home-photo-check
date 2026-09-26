@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Gray } from './image';
-import { pickMeterNumber, type OcrLine } from './number';
+import { pickFromPasses, pickMeterNumber, type OcrLine } from './number';
 
 // 400x300 light image; optional dark rectangle to simulate an LCD window or a finger.
 function img(dark?: { x0: number; y0: number; x1: number; y1: number; v: number }): Gray {
@@ -25,7 +25,7 @@ describe('pickMeterNumber', () => {
   });
   it('is not certain when recognition confidence is low', () => { expect(pickMeterNumber([line('149214094', 140, 160, 260, 180, 0.7)], img()).all_characters_certain).toBe(false); });
   it('flags a number that is only part of a longer run printed elsewhere', () => {
-    const r = pickMeterNumber([line('*BF14921409-LGFOCS', 120, 130, 280, 140), line('1492140', 140, 160, 240, 180)], img());
+    const r = pickMeterNumber([line('*BF149214094LGFOCS*', 120, 130, 280, 140), line('149214', 140, 160, 240, 180)], img());
     expect(r.issues).toContain('truncated'); expect(r.all_characters_certain).toBe(false);
   });
   it('flags something dark covering the side of the number', () => {
@@ -46,4 +46,38 @@ describe('pickMeterNumber', () => {
     expect(pickMeterNumber([line('149214', 140, 160, 220, 180), line('094', 230, 200, 265, 220)], img()).meter_number).toBe('149214');
   });
   it('reports nothing when there is no plausible number', () => { expect(pickMeterNumber([line('4094', 140, 160, 200, 180), line('CLS', 10, 10, 50, 30)], img()).meter_number_visible).toBe(false); });
+  it('handles a letter prefix and picks the right one of several numbers on the plate', () => {
+    // Austin Energy nameplate (205 E Riverside), as read by the OCR at 1600 px: the meter number is "AE 6106892",
+    // repeated in the barcode caption; 19113660 is another number, and "K=0.15" a spec value.
+    const r = pickMeterNumber([
+      line('Type 50S4xRXR 20 20-480V 4W 60Hz TA=2.5 Kh 1.8YZ', 40, 40, 380, 60, 0.96),
+      line('0014158E AE 6106892 MULT.AL', 40, 70, 380, 100),
+      line('KZAAE61068922016 RDGS.B', 60, 105, 300, 120, 0.98),
+      line('K=0.15 562 19113660', 60, 125, 300, 138, 0.87),
+    ], img());
+    expect(r).toMatchObject({ meter_number: 'AE 6106892', all_characters_certain: true });
+  });
+  it('is not certain between two equally good numbers in one pass, but a second pass settles it', () => {
+    const at960 = [line('6106892', 140, 100, 240, 115, 1), line('19113660', 140, 130, 250, 142, 1)];
+    expect(pickMeterNumber(at960, img()).all_characters_certain).toBe(false);
+    const at1600 = [line('0014158E AE 6106892 MULT.AL', 40, 70, 380, 100), line('K=0.15 562 19113660', 60, 125, 300, 138, 0.87)];
+    expect(pickFromPasses([{ lines: at960, g: img() }, { lines: at1600, g: img() }])).toMatchObject({ meter_number: 'AE 6106892', all_characters_certain: true });
+  });
+  it('reads 203 E Riverside: "AE 6136370" over a merged spec line at a second size', () => {
+    const r = pickFromPasses([
+      { lines: [line('AE 6136370', 140, 100, 260, 114, 0.86)], g: img() },
+      { lines: [line('FORM2ECL3202V3W6HTA5012 AE FOCUSRXR 6136370', 20, 100, 380, 125, 0.93), line('20997253', 150, 140, 250, 155, 0.92)], g: img() },
+    ]);
+    expect(r).toMatchObject({ meter_number: 'AE 6136370', all_characters_certain: true });
+  });
+  it('fixes a misread prefix from the barcode caption ("BE" read, caption says "…AE6106892…")', () => {
+    const r = pickMeterNumber([line('AE BE 6106892', 40, 70, 300, 100), line('KZAAE61068922016', 60, 105, 300, 120, 0.98)], img());
+    expect(r.meter_number).toBe('AE 6106892');
+  });
+  it('treats a one-digit disagreement between sizes as a misread, not a rival number', () => {
+    const r = pickFromPasses([{ lines: [line('149214094', 140, 160, 260, 180, 0.98)], g: img() }, { lines: [line('C 149234094', 140, 160, 260, 180, 0.77)], g: img() }]);
+    expect(r).toMatchObject({ meter_number: '149214094', all_characters_certain: true });
+    const close = pickFromPasses([{ lines: [line('149214094', 140, 160, 260, 180, 0.9)], g: img() }, { lines: [line('149234094', 140, 160, 260, 180, 0.88)], g: img() }]);
+    expect(close.all_characters_certain).toBe(false);
+  });
 });

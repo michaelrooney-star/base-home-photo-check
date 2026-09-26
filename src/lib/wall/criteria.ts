@@ -100,11 +100,11 @@ export const WALL_MESSAGES = {
   blurry: 'Blurry — hold steady a moment.',
   ready: 'Looks good — take the photo.',
   // after capture
-  noMeter: 'We need your electric meter in this photo. Step back and include the meter and the wall around it.',
-  tooClose: 'You’re too close to the meter. Step back until the wall on both sides of the meter and the ground below it are in the photo.',
-  moreLeft: 'Include more of the wall to the left of the meter — step back or move a little to the left.',
-  moreRight: 'Include more of the wall to the right of the meter — step back or move a little to the right.',
-  ground: 'We can’t see the ground. Tilt your phone down or step back until the ground in front of the wall is in the photo — that’s where the battery would stand.',
+  noMeter: 'Include your meter in the photo.',
+  tooClose: 'Step back to show more wall.',
+  moreLeft: 'Show more wall on the left.',
+  moreRight: 'Show more wall on the right.',
+  ground: 'Tilt down to show the ground.',
   sceneUnverified: 'We couldn’t check the scene because photo recognition didn’t load.',
   // side photos (right / left of the meter)
   sidePoint: { right: 'Face along the wall to the right of your meter.', left: 'Face along the wall to the left of your meter.' },
@@ -113,20 +113,20 @@ export const WALL_MESSAGES = {
     left: 'Looks good — take the photo.',
   },
   sideNoMeter: {
-    right: 'Keep your meter in the photo, near the left edge, so we can see where the area to its right begins.',
-    left: 'Keep your meter in the photo, near the right edge, so we can see where the area to its left begins.',
+    right: 'Keep the meter in the photo, on the left.',
+    left: 'Keep the meter in the photo, on the right.',
   },
   sideTooClose: {
-    right: 'You’re too close. Step back so we can see more of the wall and ground to the right of your meter.',
-    left: 'You’re too close. Step back so we can see more of the wall and ground to the left of your meter.',
+    right: 'Step back to show more wall.',
+    left: 'Step back to show more wall.',
   },
   wrongSide: {
-    right: 'This shows the area to the LEFT of your meter. Turn to face the area on its right side.',
-    left: 'This shows the area to the RIGHT of your meter. Turn to face the area on its left side.',
+    right: 'Wrong side — face the wall to the right.',
+    left: 'Wrong side — face the wall to the left.',
   },
   turnMore: {
-    right: 'Turn a little to the right, so the meter is on the left side of the photo and we can see the area beside it.',
-    left: 'Turn a little to the left, so the meter is on the right side of the photo and we can see the area beside it.',
+    right: 'Turn a little to the right.',
+    left: 'Turn a little to the left.',
   },
 } as const;
 

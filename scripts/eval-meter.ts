@@ -9,7 +9,8 @@ import jpeg from 'jpeg-js';
 import Ocr from '@gutenye/ocr-node';
 import { decide, type SubjectResult } from '../src/lib/meter/acceptance.ts';
 import { glare, meanLuma, ocrSize, resizeRgba, sharpness, stretch, toGray } from '../src/lib/meter/image.ts';
-import { pickMeterNumber } from '../src/lib/meter/number.ts';
+import { pickFromPasses } from '../src/lib/meter/number.ts';
+import { READ_SIZES } from '../src/lib/meter/criteria.ts';
 
 const args = process.argv.slice(2), verbose = args.includes('--verbose'), withSubject = args.includes('--subject');
 const dir = args.find(a => !a.startsWith('--')) ?? 'eval/meter';
@@ -32,16 +33,22 @@ const files = readdirSync(dir).filter(f => manifest[f] && /\.jpe?g$/i.test(f)).s
 for (const f of files) {
   const exp = manifest[f], t = Date.now();
   const img = jpeg.decode(readFileSync(join(dir, f)), { useTArray: true, maxMemoryUsageInMB: 1024 });
-  const size = ocrSize(img.width, img.height);
-  const rgba = resizeRgba(img.data, img.width, img.height, size.width, size.height);
-  const g = toGray(rgba, size.width, size.height, 4000);
+  // Same as the app's final check: read at two sizes and let the passes vote (frames.readRegion).
+  const passes = [];
+  for (const edge of READ_SIZES) {
+    const size = ocrSize(img.width, img.height, edge);
+    const rgba = resizeRgba(img.data, img.width, img.height, size.width, size.height);
+    const g = toGray(rgba, size.width, size.height, 4000);
+    passes.push({ lines: (await ocr.detect({ data: rgba, width: size.width, height: size.height })).texts, g });
+    if (edge >= Math.max(img.width, img.height)) break;
+  }
+  const g = passes[0].g;
   const inner = { x0: g.width * 0.15, y0: g.height * 0.15, x1: g.width * 0.85, y1: g.height * 0.85 };
-  const { texts } = await ocr.detect({ data: rgba, width: size.width, height: size.height });
-  const reading = pickMeterNumber(texts, g);
+  const reading = pickFromPasses(passes);
   const subject = classify ? await classify(join(dir, f)) : assumeMeter;
   const d = decide({ subject, reading, luma: meanLuma(g, inner), glare: glare(g, inner), sharpness: sharpness(stretch(g), inner), regionHeightPx: img.height });
   const expectAccept = exp.expect === 'pass';
-  const badNum = d.accepted && !!exp.number && digits(d.meterNumber) !== digits(exp.number);
+  const badNum = d.accepted && !d.review && !!exp.number && digits(d.meterNumber) !== digits(exp.number);
   const ok = d.accepted === expectAccept && !badNum;
   if (ok) correct++; if (d.accepted && !expectAccept) falseAccept++; if (!d.accepted && expectAccept) falseReject++; if (badNum) wrongNumber++;
   let subj = '';
@@ -49,7 +56,7 @@ for (const f of files) {
     const isMeter = subject.probs.electric_meter >= 0.5, right = isMeter === (exp.expect === 'pass'); subjN++; if (right) subjOk++;
     subj = ` subject=${subject.top}(${subject.probs.electric_meter.toFixed(2)})${right ? '' : ' ✗'}`;
   }
-  console.log(`${ok ? '✓' : '✗'} ${f.padEnd(28)} expect=${exp.expect.padEnd(9)} ${d.accepted ? 'ACCEPT' : 'reject'} read="${reading.meter_number}"${subj} ${Date.now() - t}ms`);
+  console.log(`${ok ? '✓' : '✗'} ${f.padEnd(28)} expect=${exp.expect.padEnd(9)} ${d.review ? 'REVIEW' : d.accepted ? 'ACCEPT' : 'reject'} read="${reading.meter_number}"${subj} ${Date.now() - t}ms`);
   if (verbose || !ok) console.log(`    ${d.accepted ? '' : 'reason: ' + d.reasons.join(' / ')}  sharp=${sharpness(stretch(g), inner).toFixed(0)}${verbose ? `\n    ${JSON.stringify(reading.debug)}` : ''}`);
 }
 console.log(`\naccuracy ${correct}/${files.length} · false accepts ${falseAccept} (worst case) · false rejects ${falseReject} · wrong numbers ${wrongNumber}` + (classify ? ` · subject ${subjOk}/${subjN}` : ''));
