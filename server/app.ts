@@ -22,10 +22,14 @@ export function createApp() {
     return c.json({ userId, cases: list });
   });
 
-  app.get('/ops/cases/:caseId', (c) => {
+  app.get('/ops/cases/:caseId', async (c) => {
     const { caseId } = c.req.param();
-    const rec = getCase(caseId);
+    let rec = getCase(caseId);
     if (!rec) return c.json({ error: 'not_found' }, 404);
+    // M4.5: auto-plan on open if not UNKNOWN and plan is empty
+    if (rec.plan.length === 0 && rec.status !== 'UNKNOWN') {
+      rec = (await planAndRun(caseId)) ?? rec;
+    }
     return c.json(rec);
   });
 

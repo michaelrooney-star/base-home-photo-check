@@ -45,44 +45,67 @@ export function Queue() {
       {loading ? (
         <div>Loading…</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-[800px] w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-2 py-1">Case</th>
-                <th className="text-left px-2 py-1">Address</th>
-                <th className="text-left px-2 py-1">City</th>
-                <th className="text-left px-2 py-1">Utility</th>
-                <th className="text-left px-2 py-1">Pack</th>
-                <th className="text-left px-2 py-1">Job</th>
-                <th className="text-left px-2 py-1">Status</th>
-                <th className="text-left px-2 py-1">Badge</th>
-                <th className="text-left px-2 py-1"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b last:border-b-0">
-                  <td className="px-2 py-1 font-mono">{r.id.slice(0, 6)}</td>
-                  <td className="px-2 py-1">{r.fingerprint.address}</td>
-                  <td className="px-2 py-1">{r.fingerprint.city}</td>
-                  <td className="px-2 py-1">{r.fingerprint.utility}</td>
-                  <td className="px-2 py-1">{r.pack}</td>
-                  <td className="px-2 py-1">{r.jobState}</td>
-                  <td className="px-2 py-1">
-                    {r.status.replace('_', ' ')}
-                  </td>
-                  <td className="px-2 py-1">
-                    {r.degraded ? <span className="inline-block rounded bg-yellow-100 text-yellow-800 px-2 py-0.5">degraded</span> : null}
-                  </td>
-                  <td className="px-2 py-1">
-                    <Link className="text-blue-600 hover:underline" to={`/ops/${userId}/case/${r.id}`}>Open</Link>
-                  </td>
+        <>
+          {/* Mobile: card list */}
+          <div className="md:hidden space-y-2">
+            {rows.map((r) => (
+              <Link
+                key={r.id}
+                to={`/ops/${userId}/case/${r.id}`}
+                className="block rounded border p-3 active:scale-[0.99]"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-mono">{r.id.slice(0, 6)}</div>
+                  {r.degraded ? <span className="rounded bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5">degraded</span> : null}
+                </div>
+                <div className="text-sm">{r.fingerprint.address}</div>
+                <div className="text-xs text-gray-600">{r.fingerprint.city} · {r.fingerprint.utility}</div>
+                <div className="mt-1 text-xs">
+                  <span className="uppercase tracking-wide text-gray-500">job</span> {r.jobState} · <span className="uppercase tracking-wide text-gray-500">status</span> {r.status.replace('_', ' ')}
+                </div>
+              </Link>
+            ))}
+          </div>
+          {/* Desktop: table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-[800px] w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-2 py-1">Case</th>
+                  <th className="text-left px-2 py-1">Address</th>
+                  <th className="text-left px-2 py-1">City</th>
+                  <th className="text-left px-2 py-1">Utility</th>
+                  <th className="text-left px-2 py-1">Pack</th>
+                  <th className="text-left px-2 py-1">Job</th>
+                  <th className="text-left px-2 py-1">Status</th>
+                  <th className="text-left px-2 py-1">Badge</th>
+                  <th className="text-left px-2 py-1"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b last:border-b-0">
+                    <td className="px-2 py-1 font-mono">{r.id.slice(0, 6)}</td>
+                    <td className="px-2 py-1">{r.fingerprint.address}</td>
+                    <td className="px-2 py-1">{r.fingerprint.city}</td>
+                    <td className="px-2 py-1">{r.fingerprint.utility}</td>
+                    <td className="px-2 py-1">{r.pack}</td>
+                    <td className="px-2 py-1">{r.jobState}</td>
+                    <td className="px-2 py-1">
+                      {r.status.replace('_', ' ')}
+                    </td>
+                    <td className="px-2 py-1">
+                      {r.degraded ? <span className="inline-block rounded bg-yellow-100 text-yellow-800 px-2 py-0.5">degraded</span> : null}
+                    </td>
+                    <td className="px-2 py-1">
+                      <Link className="text-blue-600 hover:underline" to={`/ops/${userId}/case/${r.id}`}>Open</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
