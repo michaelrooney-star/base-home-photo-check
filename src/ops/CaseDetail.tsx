@@ -162,11 +162,11 @@ export function CaseDetail() {
       {selectedNode ? (
         <>
           {/* Desktop rail */}
-          <aside className="hidden md:block fixed right-0 top-16 bottom-0 w-full max-w-md border-l bg-white overflow-y-auto">
+          <aside className="hidden md:block fixed right-0 top-0 bottom-0 w-full max-w-md border-l bg-white overflow-y-auto z-50">
             <NodeDetail node={selectedNode} rec={rec} onClose={() => setSelectedNodeId(null)} />
           </aside>
           {/* Mobile bottom sheet */}
-          <div className={`md:hidden fixed inset-0 ${showSheet ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+          <div className={`md:hidden fixed inset-0 z-50 ${showSheet ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div
               className={`absolute inset-0 bg-black/30 transition-opacity ${showSheet ? 'opacity-100' : 'opacity-0'}`}
               onClick={() => setSelectedNodeId(null)}
