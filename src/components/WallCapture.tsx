@@ -84,13 +84,16 @@ export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnow
       if (id !== run.current) return;
       setAnalysis(a);
       if (debug) setDebugInfo({ scene: a.scene, candidates: a.candidates.map(c => ({ x: Math.round(c.circle.x), y: Math.round(c.circle.y), r: Math.round(c.circle.r), p: c.p?.toFixed(2) ?? '—' })), luma: Math.round(a.luma), sharpness: Math.round(a.sharpness) });
-      if (a.proposal) { setSpot(a.proposal); setPhase('confirm'); }
+      // The recognizer agreed it's a meter: go straight to the result (a "Not my meter?" link stays on the card).
+      // Only ask when we're guessing (recognizer unavailable), or tap when nothing was found.
+      if (a.proposal?.confident) { setSpot(a.proposal); finish(a, a.proposal); }
+      else if (a.proposal) { setSpot(a.proposal); setPhase('confirm'); }
       else { setCursor({ x: 0.5, y: 0.5 }); setPhase('tap'); }
     } catch (e) {
       if (id !== run.current) return;
       console.error(e); setError('We couldn’t check this photo. Try another one.'); setPhase('live');
     }
-  }, []);
+  }, [finish]);
 
   const capture = useCallback(() => {
     const v = video.current; if (!v || !v.videoWidth) return;
@@ -289,6 +292,7 @@ export function WallCapture({ camera, sample, mode, done, skipped = [], spotKnow
             : improve ? <><button className="button" onClick={() => use()}><Check size={16} /> Use it</button><button className="button primary" onClick={retake}><RotateCcw size={17} /> Retake</button></>
             : <><button className="button" onClick={retake}><RotateCcw size={16} /> Retake</button><button className="button primary" onClick={() => use()}><Check size={17} /> Use this photo</button></>}
         </div>
+        {d.accepted && analysis?.proposal?.confident && spot?.source === 'auto' && <button className="text-button not-meter-link" onClick={() => { setCursor({ x: spot.x, y: spot.y }); setPhase('tap'); }}>Not your meter? Tap it</button>}
         {!d.accepted && spaceLimitedOnly(d) && <button className="text-button cant-step" onClick={cantStepBack}>I can’t step back any further</button>}
         {!d.accepted && rejections >= WALL_CRITERIA.rejectionsBeforeOverride && !spaceLimitedOnly(d) && <button className="text-button override-link" onClick={() => use(true)}><Send size={14} /> Still stuck? Send it for Base’s team to review.</button>}
         <details className="all-checks"><summary>Details</summary>

@@ -357,3 +357,4 @@
   .reviewing .finished-heading .result-icon,.reviewing .finished-heading>p{display:none}
   .reviewing .finished-heading h1{font-size:26px}
 }
+.not-meter-link{display:block;margin:6px auto 0;font-size:13px;text-decoration:underline;text-underline-offset:3px}
