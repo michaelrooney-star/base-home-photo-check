@@ -97,6 +97,13 @@ export type FollowUpContact = {
   note?: string;
 };
 
+export type CaseNote = {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: number;
+};
+
 export type Citation = {
   label: string;
   url?: string;
@@ -161,6 +168,63 @@ export type PlanNode = {
   result?: WorkerResult;
 };
 
+export type SystemId =
+  | 'HUBSPOT'
+  | 'PHOTO_CHECK'
+  | 'PERMIT_KB'
+  | 'ERP'
+  | 'FIELD_APP'
+  | 'AUSTIN_ENERGY'
+  | 'ERCOT'
+  | 'QSE'
+  | 'BASE_OPS';
+
+export type WorkflowLane = 'INTAKE' | 'SITE' | 'PERMIT' | 'FIELD' | 'ACTIVATION';
+
+export type WorkflowNodeState = 'PENDING' | 'RUNNING' | 'WAITING_EXTERNAL' | 'BLOCKED' | 'DONE';
+
+export type WorkflowNode = {
+  id: string;
+  label: string;
+  lane: WorkflowLane;
+  system: SystemId;
+  dependsOn: string[];
+  state: WorkflowNodeState;
+  issue?: string;
+  nextAction?: string;
+  owner?: string;
+  externalRef?: string;
+  dueAt?: number;
+  updatedAt: number;
+  ruleIds?: string[];
+};
+
+export type SystemEvent = {
+  id: string;
+  nodeId: string;
+  system: SystemId;
+  receivedAt: number;
+  summary: string;
+  payload?: Record<string, string>;
+};
+
+export type CaseWorkflow = {
+  nodes: WorkflowNode[];
+  events: SystemEvent[];
+};
+
+export type WorkflowStep = {
+  nodeId: string;
+  label: string;
+  system: SystemId;
+};
+
+export type WorkflowNodeOverride = {
+  state: WorkflowNodeState;
+  issue?: string;
+  nextAction?: string;
+};
+
 export type CaseRecord = {
   id: string;
   created_at: number;
@@ -176,6 +240,9 @@ export type CaseRecord = {
   activationGates: ActivationGate[];
   externalEvents: ExternalEvent[];
   followUpContact?: FollowUpContact;
+  workflow: CaseWorkflow;
+  workflowOverrides?: Record<string, WorkflowNodeOverride>;
+  notes: CaseNote[];
 };
 
 export type AdminToggles = {

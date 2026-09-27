@@ -5,6 +5,16 @@ import { resetStore, listCasesByAssignee, getCase, saveCase, ensureRulesLoaded, 
 import { seedDemoCases, deriveUtilityType, resolvePack } from './seed';
 import { planAndRun } from './runner';
 import { activationSummary, allowedGateStatus, operationalStatus } from './activation';
+import { attachWorkflow, buildWorkflow, currentWorkflowStep, ingestWorkflowEvent } from './workflow';
+import {
+  applyActivationGateAction,
+  applyFieldWorkOrder,
+  applyPermitCheck,
+  listActivationQueue,
+  fieldQueueBuckets,
+  listFieldQueue,
+  listPermitsQueue,
+} from './services';
 import type { ActivationGateKey, ActivationGateStatus, CreateCaseBody, ExternalEventType, PackId } from './types';
 
 export function createApp() {
@@ -12,12 +22,22 @@ export function createApp() {
   app.use('*', cors());
   app.use('*', prettyJSON());
 
-  const presentCase = (item: any) => ({
-    ...item,
-    operationalStatus: operationalStatus(item.status, item.activationRoute, item.activationGates).status,
-    operationalReason: operationalStatus(item.status, item.activationRoute, item.activationGates).reason,
-    activationSummary: activationSummary(item.activationRoute, item.activationGates, Date.now(), item.externalEvents),
-  });
+  const presentCase = (item: any) => {
+    const workflow = item.workflow?.nodes?.length ? item.workflow : buildWorkflow(item);
+    const currentStep = currentWorkflowStep(workflow);
+    const notes = item.notes ?? [];
+    return {
+      ...item,
+      notes,
+      noteCount: notes.length,
+      latestNote: notes[0]?.body ?? '',
+      workflow,
+      currentStep,
+      operationalStatus: operationalStatus(item.status, item.activationRoute, item.activationGates).status,
+      operationalReason: operationalStatus(item.status, item.activationRoute, item.activationGates).reason,
+      activationSummary: activationSummary(item.activationRoute, item.activationGates, Date.now(), item.externalEvents),
+    };
+  };
 
   // Health
   app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
@@ -63,8 +83,10 @@ export function createApp() {
       activationRoute: 'UNKNOWN' as const,
       activationGates: [],
       externalEvents: [],
+      workflow: { nodes: [], events: [] },
+      notes: [],
     };
-    saveCase(rec);
+    saveCase(attachWorkflow(rec));
     return c.json(presentCase(rec), 201);
   });
 
@@ -113,6 +135,110 @@ export function createApp() {
     rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'STATUS_CHANGED', source: gate.source, gateKey: gate.key, message: body.message ?? `${gate.label} moved from ${previous} to ${body.status}.`, timestamp: gate.updatedAt, acknowledged: true, assignedOwner: gate.owner });
     saveCase(rec);
     return c.json(presentCase(rec));
+  });
+
+  app.post('/ops/cases/:caseId/notes', async (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const body = (await c.req.json()) as { text?: string; author?: string };
+    if (!body.text?.trim()) return c.json({ error: 'text_required' }, 400);
+    const note = {
+      id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      author: body.author?.trim() || 'Base Ops',
+      body: body.text.trim(),
+      createdAt: Date.now(),
+    };
+    rec.notes = [note, ...(rec.notes ?? [])];
+    saveCase(rec);
+    return c.json(presentCase(rec));
+  });
+
+  app.get('/permits/queue', (c) => {
+    seedDemoCases();
+    const cases = listPermitsQueue(listCasesByAssignee('base_admin')).map(presentCase);
+    return c.json({ service: 'permits', cases });
+  });
+
+  app.get('/permits/cases/:caseId', (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    return c.json(presentCase(rec));
+  });
+
+  app.post('/permits/cases/:caseId/checks/:nodeId', async (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const body = (await c.req.json()) as { action?: 'complete' | 'reject' };
+    if (!body.action) return c.json({ error: 'action_required' }, 400);
+    const result = applyPermitCheck(rec, c.req.param('nodeId'), body.action);
+    if (!result.ok) return c.json({ error: 'invalid_action', message: result.message }, 400);
+    saveCase(rec);
+    return c.json({ ...presentCase(rec), serviceResult: result });
+  });
+
+  app.get('/field/queue', (c) => {
+    seedDemoCases();
+    const all = listCasesByAssignee('base_admin');
+    const buckets = fieldQueueBuckets(all);
+    const present = (list: typeof all) => list.map(presentCase);
+    return c.json({
+      service: 'field',
+      cases: present(listFieldQueue(all)),
+      buckets: {
+        active: present(buckets.active),
+        upcoming: present(buckets.upcoming),
+        completed: present(buckets.completed),
+      },
+    });
+  });
+
+  app.get('/field/cases/:caseId', (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    return c.json(presentCase(rec));
+  });
+
+  app.post('/field/cases/:caseId/work-order', async (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const body = (await c.req.json()) as { action?: 'complete' | 'block' };
+    if (!body.action) return c.json({ error: 'action_required' }, 400);
+    const result = applyFieldWorkOrder(rec, body.action);
+    if (!result.ok) return c.json({ error: 'invalid_action', message: result.message }, 400);
+    saveCase(rec);
+    return c.json({ ...presentCase(rec), serviceResult: result });
+  });
+
+  app.get('/activation/queue', (c) => {
+    seedDemoCases();
+    const cases = listActivationQueue(listCasesByAssignee('base_admin')).map(presentCase);
+    return c.json({ service: 'activation', cases });
+  });
+
+  app.get('/activation/cases/:caseId', (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    return c.json(presentCase(rec));
+  });
+
+  app.post('/activation/cases/:caseId/gates/:gateKey', async (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const body = (await c.req.json()) as { action?: 'accept' | 'fail' };
+    if (!body.action) return c.json({ error: 'action_required' }, 400);
+    const result = applyActivationGateAction(rec, c.req.param('gateKey') as ActivationGateKey, body.action);
+    if (!result.ok) return c.json({ error: 'invalid_action', message: result.message }, 400);
+    saveCase(rec);
+    return c.json({ ...presentCase(rec), serviceResult: result });
+  });
+
+  app.post('/ops/cases/:caseId/workflow/ingest', (c) => {
+    const rec = getCase(c.req.param('caseId'));
+    if (!rec) return c.json({ error: 'not_found' }, 404);
+    const result = ingestWorkflowEvent(rec);
+    if (!result.ok) return c.json({ error: 'nothing_to_ingest', message: result.message }, 400);
+    saveCase(rec);
+    return c.json({ ...presentCase(rec), ingest: result });
   });
 
   app.post('/ops/cases/:caseId/activation/gates/:gateKey/task', (c) => {
