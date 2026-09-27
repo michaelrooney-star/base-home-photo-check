@@ -1,8 +1,11 @@
-import { ArrowLeft, Camera, MapPin, MessageSquare, X } from 'lucide-react';
+import { ArrowLeft, MessageSquare } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { StatusPill } from '../components/ConsoleShell';
 import { ActivationReadiness } from './ActivationReadiness';
+import { SystemsStrip } from './SystemsStrip';
+import { SiteEvidence } from './SiteEvidence';
+import { PhotoLightbox } from './PhotoLightbox';
 import type { ActivationGateVM, ExternalEventVM } from './ActivationReadiness';
 import type { SystemEventVM, WorkflowNodeVM } from './WorkflowGraph';
 
@@ -99,6 +102,8 @@ export function CaseDetail() {
         <StatusPill tone={operationalTone(rec.operationalStatus)}>{operationalLabel(rec.operationalStatus)}</StatusPill>
       </section>
 
+      <SystemsStrip />
+
       <ActivationReadiness
         route={rec.activationRoute}
         gates={rec.activationGates}
@@ -110,42 +115,13 @@ export function CaseDetail() {
       />
 
       {selectedPhoto && (
-        <div className="console-photo-lightbox" role="dialog" aria-modal="true" aria-label={`${selectedPhoto.title} preview`} onClick={() => setSelectedPhoto(null)}>
-          <div className="console-photo-lightbox-card" onClick={(e) => e.stopPropagation()}>
-            <button className="console-icon-button" onClick={() => setSelectedPhoto(null)} aria-label="Close photo preview"><X size={18} /></button>
-            <img src={selectedPhoto.src} alt={selectedPhoto.title} />
-            <div>
-              <h2>{selectedPhoto.title}</h2>
-              <p>{selectedPhoto.note}</p>
-              <span><MapPin size={13} /> {addressLabel(rec.fingerprint.address, rec.fingerprint.city)}</span>
-            </div>
-          </div>
-        </div>
+        <PhotoLightbox
+          photo={selectedPhoto}
+          address={rec.fingerprint.address}
+          city={rec.fingerprint.city}
+          onClose={() => setSelectedPhoto(null)}
+        />
       )}
-    </section>
-  );
-}
-
-function SiteEvidence({ photos, address, onOpen }: { photos: { id: string; title: string; src: string; note: string }[]; address: string; onOpen: (photo: { title: string; src: string; note: string }) => void }) {
-  return (
-    <section className="console-site-evidence">
-      <div className="console-evidence-heading">
-        <div>
-          <p className="console-eyebrow"><span /> SITE EVIDENCE</p>
-          <h2>Photo check submission</h2>
-          <p>Customer photos from the Home Photo Check app — source system for site context.</p>
-        </div>
-        <span className="console-evidence-count"><Camera size={15} /> {photos.length} photos</span>
-      </div>
-      <div className="console-photo-grid">
-        {photos.map((photo) => (
-          <button className="console-photo-card" key={photo.id} onClick={() => onOpen(photo)}>
-            <img src={photo.src} alt={photo.title} />
-            <span><strong>{photo.title}</strong><small>{photo.note}</small></span>
-          </button>
-        ))}
-      </div>
-      <p className="console-photo-disclaimer"><Camera size={13} /> Photo Check evidence · {address}</p>
     </section>
   );
 }
@@ -224,6 +200,5 @@ function CaseNotes({ caseId, notes, onSaved }: { caseId: string; notes: CaseNote
   );
 }
 
-function addressLabel(address: string, city: string) { return `${address}, ${city}`; }
 function operationalLabel(value: CaseRec['operationalStatus']) { return value === 'OPERATIONAL' ? 'Operational' : value === 'BLOCKED' ? 'Blocked' : 'Waiting'; }
 function operationalTone(value: CaseRec['operationalStatus']): 'ready' | 'queued' | 'danger' { return value === 'OPERATIONAL' ? 'ready' : value === 'BLOCKED' ? 'danger' : 'queued'; }

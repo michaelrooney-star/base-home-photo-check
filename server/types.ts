@@ -219,6 +219,12 @@ export type WorkflowStep = {
   system: SystemId;
 };
 
+export type WorkflowNodeOverride = {
+  state: WorkflowNodeState;
+  issue?: string;
+  nextAction?: string;
+};
+
 export type CaseRecord = {
   id: string;
   created_at: number;
@@ -235,6 +241,7 @@ export type CaseRecord = {
   externalEvents: ExternalEvent[];
   followUpContact?: FollowUpContact;
   workflow: CaseWorkflow;
+  workflowOverrides?: Record<string, WorkflowNodeOverride>;
   notes: CaseNote[];
 };
 

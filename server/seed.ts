@@ -236,5 +236,27 @@ export function seedDemoCases() {
     saveCase(newCase('base_admin', fp, item.pack, item.photoSet, 'OPS_READY', item.route ?? 'UNKNOWN', item.scenario, item.id, item.notes ?? []));
   });
 
+  const midFp = makeFingerprint({ address: '106 S Congress Ave', city: 'Austin', utility: 'Austin Energy' });
+  const midCase = newCase('base_admin', midFp, 'AUSTIN_RICH', 'set-b', 'QUEUED', 'UNKNOWN', undefined, 'perm1mid');
+  midCase.workflowOverrides = {
+    pack: { state: 'DONE', nextAction: 'No action required' },
+    city: { state: 'RUNNING', nextAction: 'City portal review in progress' },
+    electrical: { state: 'WAITING_EXTERNAL', nextAction: 'Waiting on electrical engineer sign-off' },
+    fire: { state: 'PENDING', nextAction: 'Not started — blocked on parallel checks' },
+    field: { state: 'PENDING', nextAction: 'Waiting for permits before scheduling crew' },
+  };
+  saveCase(attachWorkflow(midCase));
+
+  const activeFp = makeFingerprint({ address: '107 S Congress Ave', city: 'Austin', utility: 'Austin Energy' });
+  const activeCase = newCase('base_admin', activeFp, 'AUSTIN_RICH', 'set-c', 'QUEUED', 'UNKNOWN', undefined, 'field2run');
+  activeCase.workflowOverrides = {
+    pack: { state: 'DONE' },
+    city: { state: 'DONE' },
+    electrical: { state: 'DONE' },
+    fire: { state: 'DONE' },
+    field: { state: 'RUNNING', nextAction: 'Crew on site — install in progress' },
+  };
+  saveCase(attachWorkflow(activeCase));
+
   store.seeded = true;
 }

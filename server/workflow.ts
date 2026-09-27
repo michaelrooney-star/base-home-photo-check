@@ -10,6 +10,7 @@ import type {
   SystemEvent,
   SystemId,
   WorkflowNode,
+  WorkflowNodeOverride,
   WorkflowNodeState,
   WorkflowStep,
 } from './types';
@@ -41,6 +42,21 @@ function gateSystem(key: ActivationGateKey): SystemId {
   if (key === 'TELEMETRY') return 'QSE';
   if (key === 'ERCOT_REGISTRATION' || key === 'DISPATCH_QUALIFICATION' || key === 'ANCILLARY_SERVICES') return 'ERCOT';
   return 'AUSTIN_ENERGY';
+}
+
+function applyOverrides(nodes: WorkflowNode[], overrides?: Record<string, WorkflowNodeOverride>): WorkflowNode[] {
+  if (!overrides || !Object.keys(overrides).length) return nodes;
+  return nodes.map((node) => {
+    const o = overrides[node.id];
+    if (!o) return node;
+    return {
+      ...node,
+      state: o.state,
+      issue: o.issue ?? node.issue,
+      nextAction: o.nextAction ?? node.nextAction,
+      updatedAt: Date.now(),
+    };
+  });
 }
 
 function applyDependencyStates(nodes: WorkflowNode[]): WorkflowNode[] {
@@ -236,8 +252,8 @@ export function buildWorkflow(rec: CaseRecord, now = Date.now()): CaseWorkflow {
       nextAction: 'Activation route not configured for this utility.',
       issue: 'Interconnection and dispatch gates are not set up yet.',
     });
-    const events = baseEvents(now, rec.pack);
-    return { nodes: applyDependencyStates(nodes), events };
+    const events = mergeEvents(rec, baseEvents(now, rec.pack), now);
+    return { nodes: applyDependencyStates(applyOverrides(nodes, rec.workflowOverrides)), events };
   }
 
   const gateNode = (key: ActivationGateKey, dependsOn: string[]): WorkflowNode => {
@@ -268,16 +284,64 @@ export function buildWorkflow(rec: CaseRecord, now = Date.now()): CaseWorkflow {
     nodes.push(gateNode('ANCILLARY_SERVICES', ['telemetry']));
   }
 
-  const events = [...baseEvents(now, rec.pack), ...activationEvents(rec.activationGates, rec.externalEvents, now)];
-  if (rec.workflow?.events?.length) {
-    const seeded = new Set(events.map((e) => e.id));
-    for (const e of rec.workflow.events) {
-      if (!seeded.has(e.id)) events.push(e);
-    }
-    events.sort((a, b) => a.receivedAt - b.receivedAt);
-  }
+  const events = mergeEvents(
+    rec,
+    [...baseEvents(now, rec.pack), ...activationEvents(rec.activationGates, rec.externalEvents, now)],
+    now,
+  );
 
-  return { nodes: applyDependencyStates(nodes), events };
+  return { nodes: applyDependencyStates(applyOverrides(nodes, rec.workflowOverrides)), events };
+}
+
+function mergeEvents(rec: CaseRecord, events: SystemEvent[], _now: number): SystemEvent[] {
+  const merged = [...events];
+  if (rec.workflow?.events?.length) {
+    const seeded = new Set(merged.map((e) => e.id));
+    for (const e of rec.workflow.events) {
+      if (!seeded.has(e.id)) merged.push(e);
+    }
+    merged.sort((a, b) => a.receivedAt - b.receivedAt);
+  }
+  return merged;
+}
+
+export type ServiceEventInput = {
+  nodeId: string;
+  system: SystemId;
+  state: WorkflowNodeState;
+  summary: string;
+  eventType: string;
+  issue?: string;
+  nextAction?: string;
+  now?: number;
+};
+
+/** Persist a service action as an override + system event, then rebuild workflow. */
+export function applyServiceEvent(rec: CaseRecord, input: ServiceEventInput): CaseRecord {
+  const now = input.now ?? Date.now();
+  if (!rec.workflowOverrides) rec.workflowOverrides = {};
+  rec.workflowOverrides[input.nodeId] = {
+    state: input.state,
+    issue: input.issue,
+    nextAction: input.nextAction,
+  };
+  const evt: SystemEvent = {
+    id: `svc_${input.eventType}_${now}`,
+    nodeId: input.nodeId,
+    system: input.system,
+    receivedAt: now,
+    summary: input.summary,
+    payload: { event: input.eventType },
+  };
+  const prior = rec.workflow?.events ?? [];
+  rec.workflow = buildWorkflow(rec, now);
+  rec.workflow.events.push(evt);
+  const seen = new Set(rec.workflow.events.map((e) => e.id));
+  for (const e of prior) {
+    if (!seen.has(e.id)) rec.workflow.events.push(e);
+  }
+  rec.workflow.events.sort((a, b) => a.receivedAt - b.receivedAt);
+  return rec;
 }
 
 export function bottleneckNodeId(workflow: CaseWorkflow): string | null {

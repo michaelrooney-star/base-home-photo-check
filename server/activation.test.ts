@@ -13,13 +13,13 @@ describe('activation workflow', () => {
     expect(data.cases.some((item: any) => item.activationSummary.source === 'AUSTIN_ENERGY')).toBe(true);
     expect(data.cases.some((item: any) => item.activationSummary.correctionNeeded)).toBe(true);
     expect(data.cases.some((item: any) => item.activationSummary.dispatchReady)).toBe(true);
-    expect(data.cases).toHaveLength(12);
+    expect(data.cases).toHaveLength(14);
     expect(new Set(data.cases.map((item: any) => item.fingerprint.city))).toEqual(new Set(['Austin', 'Round Rock', 'Dallas', 'Houston', 'San Antonio']));
     expect(new Set(data.cases.map((item: any) => item.fingerprint.utility))).toEqual(new Set(['Austin Energy', 'Oncor', 'CenterPoint Energy', 'CPS Energy']));
     expect(new Set(data.cases.map((item: any) => item.pack))).toEqual(new Set(['AUSTIN_RICH', 'ROUNDROCK_ONCOR', 'DALLAS_ONCOR', 'HOUSTON_STUB', 'SANANTONIO_STUB']));
     expect(data.cases.filter((item: any) => item.operationalStatus === 'BLOCKED')).toHaveLength(2);
     expect(data.cases.filter((item: any) => item.operationalStatus === 'OPERATIONAL')).toHaveLength(1);
-    expect(data.cases.filter((item: any) => item.operationalStatus === 'WAITING')).toHaveLength(9);
+    expect(data.cases.filter((item: any) => item.operationalStatus === 'WAITING')).toHaveLength(11);
   });
 
   it('derives operational status with blocking conditions taking precedence', () => {

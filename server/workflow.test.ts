@@ -3,7 +3,8 @@ import { createApp } from './app';
 import { resetStore } from './store';
 import { seedDemoCases } from './seed';
 import { getCase } from './store';
-import { buildWorkflow, currentWorkflowStep, ingestWorkflowEvent } from './workflow';
+import { applyFieldWorkOrder, applyPermitCheck, applyActivationGateAction } from './services';
+import { attachWorkflow, buildWorkflow, currentWorkflowStep, ingestWorkflowEvent } from './workflow';
 
 describe('installation workflow graph', () => {
   beforeEach(() => resetStore());
@@ -78,6 +79,46 @@ describe('installation workflow graph', () => {
     expect(data.notes[0].body).toBe('Left voicemail with homeowner.');
     expect(data.latestNote).toBe('Left voicemail with homeowner.');
     expect(data.noteCount).toBeGreaterThan(1);
+  });
+
+  it('compensates downstream when a permit check is rejected', () => {
+    seedDemoCases();
+    const rec = getCase('perm1mid');
+    expect(rec).toBeTruthy();
+    rec!.workflowOverrides = { ...rec!.workflowOverrides, field: { state: 'DONE' } };
+    attachWorkflow(rec!);
+    applyPermitCheck(rec!, 'city', 'reject');
+    const field = rec!.workflow.nodes.find((n) => n.id === 'field');
+    expect(field?.state).toBe('PENDING');
+    expect(field?.issue).toContain('permit');
+  });
+
+  it('blocks field work order without advancing activation', () => {
+    seedDemoCases();
+    const rec = getCase('perm1mid');
+    expect(rec).toBeTruthy();
+    const result = applyFieldWorkOrder(rec!, 'block');
+    expect(result.ok).toBe(true);
+    const field = rec!.workflow.nodes.find((n) => n.id === 'field');
+    expect(field?.state).toBe('BLOCKED');
+    expect(rec!.activationGates.length).toBe(0);
+  });
+
+  it('service APIs return role queues', async () => {
+    const app = createApp();
+    await app.request('/api/ops/queue/admin');
+    const permits = await app.request('/api/permits/queue');
+    const field = await app.request('/api/field/queue');
+    const activation = await app.request('/api/activation/queue');
+    expect(permits.status).toBe(200);
+    expect(field.status).toBe(200);
+    expect(activation.status).toBe(200);
+    const permitData = await permits.json();
+    const fieldData = await field.json();
+    expect(permitData.cases.some((c: { id: string }) => c.id === 'perm1mid')).toBe(true);
+    expect(fieldData.buckets.upcoming.some((c: { id: string }) => c.id === 'perm1mid')).toBe(true);
+    expect(fieldData.buckets.active.some((c: { id: string }) => c.id === 'field2run')).toBe(true);
+    expect(fieldData.buckets.completed.length).toBeGreaterThan(5);
   });
 
   it('returns 404 for missing case without crashing client parsers', async () => {

@@ -283,11 +283,47 @@ Tuned after a test on iPhones at a real meter, where "Hold steady" never cleared
 - **"Hold steady" only means movement.** While the number is being read, the banner says "Reading the meter number…".
 - **Auto-capture doesn't wait for meter recognition** (about 150 MB, which can be slow or fail on an iPhone). The saved photo waits at most 8 s for it. If recognition still isn't available, a photo with a readable meter number is accepted and marked "not checked" for reviewers; before, it was rejected.
 - **After 5 s,** "Or tap the button to take the photo yourself." appears above the shutter.
-The member app at `/` remains unchanged. Base Operations adds client-case review, a permits knowledge base, and a single Hono API:
+The member app at `/` remains unchanged. Base Operations adds client-case review, role-specific service consoles, a permits knowledge base, and a single Hono API:
 
-- `/ops/admin` — Base Admin client cases and case detail
+- `/` — Home Photo Check (member capture; local-only)
+- `/ops/admin` — Base Admin orchestrator (full install graph)
+- `/ops/permits` — Permits desk (`/api/permits/*`)
+- `/ops/field` — Field / ERP console (`/api/field/*`)
+- `/ops/activation` — Utility & ERCOT activation desk (`/api/activation/*`)
 - `/admin/knowledge` — Permits knowledge base and jurisdiction-pack details
-- API: `/api/ops/*`, `/api/admin/*` — one Hono catch‑all with a shared in‑memory demo store
+
+API paths simulate separate services in one process (production would be separate deployables with the same event contracts):
+
+| Service | API prefix | Example events |
+| --- | --- | --- |
+| Base Admin | `/api/ops/*` | joins all system events into one case graph |
+| Permits | `/api/permits/*` | `PermitCheckCompleted`, `PermitCheckRejected` |
+| Field / ERP | `/api/field/*` | `WorkOrderClosed`, `WorkOrderBlocked` |
+| Activation | `/api/activation/*` | `ActivationGateAccepted`, `RegistrationFailed` |
+
+```mermaid
+flowchart LR
+  member[Member_PhotoCheck]
+  permits[Permits_service]
+  field[Field_ERP]
+  activation[Activation_service]
+  admin[Base_Admin]
+  member -->|"PhotosSubmitted"| admin
+  permits -->|"PermitCheckCompleted_or_Rejected"| admin
+  field -->|"WorkOrderClosed_or_Blocked"| admin
+  activation -->|"PTO_or_RegistrationFailed"| admin
+  admin -->|"process_manager_graph"| admin
+```
+
+### 90-second demo script
+
+1. Open **Permits** (`/ops/permits`) → case `perm1mid` (106 S Congress) → reject a city permit check.
+2. Open **Admin** → same case → field node stays `PENDING` (downstream frozen).
+3. Open **Field** → complete work order after permits clear (or block site).
+4. Open **Activation** → case `lel1yrft` (101 S Congress) → fail ERCOT registration → telemetry/dispatch stay gray in Admin graph.
+5. On `qot686kp` (100 S Congress) use **Simulate incoming event** or Activation desk to accept waiting PTO.
+
+Seeded judge cases: `perm1mid` (permits in progress), `qot686kp` (PTO waiting), `lel1yrft` (ERCOT blocked), `608fv0c6` (dispatch-ready).
 
 The visible product language is intentionally Base-oriented:
 
