@@ -123,7 +123,7 @@ Icons: Lucide (ISC). OpenCV.js: OpenCV Apache-2.0 distribution via `@techstark/o
 
 The member app at `/` remains unchanged. Base Operations adds client-case review, demo controls, and a single Hono API:
 
-- `/ops/:userId` — Client cases and case detail
+- `/ops/admin` — Base Admin client cases and case detail
 - `/admin` — Local demo controls for failure and conflict scenarios
 - `/admin/knowledge` — Rules library and jurisdiction-pack details
 - API: `/api/ops/*`, `/api/admin/*` — one Hono catch‑all with a shared in‑memory demo store
@@ -167,7 +167,7 @@ The API keeps stable status codes while the UI uses clearer operator language:
 | `BLOCKED` | Blocked | A worker failed in a way that prevents the workflow from continuing. |
 | `UNKNOWN` | Setup needed | No verified jurisdiction/rules pack could be matched; the system fails closed. |
 
-`degraded: true` is a separate fallback flag. The UI presents it as **Fallback used** even when the underlying case status is `OPS_READY`.
+Utility-check failures are treated as an incomplete review and return to the simple **Review not done** state.
 
 Transient workflow states include `PLANNED`, `RUNNING`, and `RECONCILING`. Worker states are `PENDING`, `RUNNING`, `DONE`, and `FAILED`.
 
@@ -186,7 +186,6 @@ Red connectors show the critical path through Resolve pack, Fire safety, Utility
 The `/admin` page is a local demo harness rather than a production administration area:
 
 - **Reset and reseed** restores the in-memory case store and clears scenario toggles.
-- **Simulate a fallback** makes future utility checks retry, fail, and use cached verified rules. The case then shows Fallback used/Degraded.
 - **Simulate a rule conflict** accepts a short or full case ID, reruns that case immediately, and makes Fire evidence conflict with the verified rules. The case becomes Review required.
 
 These controls affect only the local in-memory demo store. They do not call external utilities, change real permits, or persist across a process restart/cold start.
@@ -201,8 +200,7 @@ Each seeded case includes seven mock customer-submitted photos: meter number, wh
 
 Demo script (happy path + failure + conflict + gap):
 
-1. Case A — Austin happy: Open `/ops/base_admin`, choose a case marked Ready for review, and inspect its evidence, plan, and citations.
-2. Case B — Utility fallback: In `/admin`, enable the utility failure scenario, then run a queued case → retries → fallback → Fallback used.
+1. Case A — Austin happy: Open `/ops/admin`, choose a case marked Ready for review, and inspect its evidence, plan, and citations.
 3. Case C — Rule conflict: In `/admin`, enter a short or full case ID and choose Run conflict → the case is immediately rerun → Review required.
 4. Waco — Open a Waco case → Rules pack: `UNKNOWN_PACK` → Setup needed (knowledge gap).
 

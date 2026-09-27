@@ -131,13 +131,13 @@ function newCase(
   fp: CaseFingerprint,
   pack: PackId,
   photoSet: 'set-a' | 'set-b' | 'set-c' = 'set-a',
-  stage: 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED' | 'UNKNOWN' = 'QUEUED',
+  stage: 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN' = 'QUEUED',
   activationRoute: CaseRecord['activationRoute'] = 'UNKNOWN',
   activationScenario?: ActivationScenario,
 ): CaseRecord {
   const id = uid();
   const unknown = pack === 'UNKNOWN_PACK' || stage === 'UNKNOWN';
-  const status = unknown ? 'UNKNOWN' : stage === 'DEGRADED' ? 'OPS_READY' : stage;
+  const status = unknown ? 'UNKNOWN' : stage;
   const activation = activationScenario
     ? makeActivationState(activationRoute, activationScenario)
     : { activationGates: [], externalEvents: [] };
@@ -156,7 +156,6 @@ function newCase(
     pack,
     jobState: status,
     status,
-    degraded: stage === 'DEGRADED',
     plan: stage === 'QUEUED' || unknown ? [] : stagedPlan(stage),
     why: packCitations[pack] ?? [],
     sitePhotos: mockSitePhotos(photoSet),
@@ -166,7 +165,7 @@ function newCase(
   };
 }
 
-function stagedPlan(stage: 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED'): PlanNode[] {
+function stagedPlan(stage: 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED'): PlanNode[] {
   const ok = (findings: Finding[] = []) => ({ status: 'ok' as const, findings, attempts: 1 });
   const plan: PlanNode[] = [
     { id: 'n0_resolve_pack', wave: 0, worker: 'resolve_pack', dependsOn: [], state: 'DONE', result: ok() },
@@ -180,10 +179,6 @@ function stagedPlan(stage: 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED'
   if (stage === 'BLOCKED') {
     plan[1].state = 'FAILED';
     plan[1].result = { status: 'failed', error: 'City permit source could not be reconciled.', attempts: 2 };
-  }
-  if (stage === 'DEGRADED') {
-    plan[4].state = 'FAILED';
-    plan[4].result = { status: 'failed', error: 'Utility source timed out; cached verified rules used.', attempts: 2 };
   }
   return plan;
 }
@@ -218,7 +213,7 @@ export function seedDemoCases() {
       ['ERCOT_ADER', 'TELEMETRY_PENDING'],
       ['ERCOT_ADER', 'DISPATCH_READY'],
     ][i] as [CaseRecord['activationRoute'], ActivationScenario] | undefined;
-    const rec = newCase('base_admin', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'DEGRADED', 'QUEUED', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'DEGRADED', activation?.[0], activation?.[1]);
+    const rec = newCase('base_admin', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'QUEUED', 'OPS_READY', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED', activation?.[0], activation?.[1]);
     cases.push(rec);
   }
 

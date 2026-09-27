@@ -64,19 +64,6 @@ async function runFireWorker(caseRec: CaseRecord): Promise<WorkerResult> {
 }
 
 async function runUtilityWorker(caseRec: CaseRecord): Promise<WorkerResult> {
-  // Inject failure path: kill + retry twice then fallback to CACHE_VERIFIED_PACK
-  let attempts = 0;
-  if (store.toggles.killUtilityWorker) {
-    while (attempts < 2) {
-      attempts++;
-      await new Promise((r) => setTimeout(r, 150));
-    }
-    return {
-      status: 'failed',
-      error: 'Injected utility worker failure',
-      attempts,
-    };
-  }
   return {
     status: 'ok',
     findings: [],
@@ -186,16 +173,10 @@ export async function planAndRun(caseId: string): Promise<CaseRecord | undefined
   const findings: Finding[] = [];
   let hasFailure = false;
   let needsReview = false;
-  let degraded = false;
 
   for (const node of wave1) {
     if (node.result?.status === 'failed') {
-      if (node.worker === 'utility_rules') {
-        // Fallback allowed: use CACHE_VERIFIED_PACK
-        degraded = true;
-      } else {
-        hasFailure = true;
-      }
+      hasFailure = true;
     }
     if (node.result?.status === 'ok') {
       findings.push(...(node.result.findings ?? []));
@@ -209,7 +190,6 @@ export async function planAndRun(caseId: string): Promise<CaseRecord | undefined
     }
   }
 
-  rec.degraded = degraded;
   rec.why = [...(rec.why ?? []), ...findings];
 
   if (rec.pack === 'UNKNOWN_PACK') {

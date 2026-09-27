@@ -125,7 +125,6 @@ export type WorkerResult =
   | {
       status: 'ok';
       findings: Finding[];
-      degraded?: boolean;
       attempts: number;
     }
   | {
@@ -151,7 +150,6 @@ export type CaseRecord = {
   pack: PackId;
   jobState: JobState;
   status: CaseStatus;
-  degraded: boolean; // fallback used
   plan: PlanNode[];
   why: Finding[]; // reconciled findings
   sitePhotos?: SitePhoto[];
@@ -162,8 +160,6 @@ export type CaseRecord = {
 };
 
 export type AdminToggles = {
-  // If true, utility worker fails and retries up to 2, then falls back to CACHE_VERIFIED_PACK
-  killUtilityWorker: boolean;
   // If true, mark specified caseIds to have a FIRE conflict (worker NO_REQUIREMENT vs verified)
   fireConflictCaseIds: Set<string>;
 };

@@ -249,7 +249,7 @@ export function PlanDAG({ nodes, onSelectNode, selectedNodeId }: PlanDAGProps) {
       <div className="console-dag-legend mt-2 text-xs text-gray-600 flex flex-wrap items-center gap-x-4 gap-y-2">
         <LegendItem icon={<CheckCircle size={16} className="text-green-600" />} label="Success" />
         <LegendItem icon={<Loader2 size={16} className="text-blue-600" />} label="Running" />
-        <LegendItem icon={<AlertTriangle size={16} className="text-amber-600" />} label="Needs review / Degraded" />
+        <LegendItem icon={<AlertTriangle size={16} className="text-amber-600" />} label="Needs review" />
         <LegendItem icon={<AlertOctagon size={16} className="text-red-600" />} label="Failed" />
         <LegendItem icon={<Clock size={16} className="text-gray-600" />} label="Queued" />
       </div>

@@ -25,14 +25,10 @@ export function createApp() {
     return c.json({ userId: 'base_admin', cases });
   });
 
-  app.get('/ops/cases/:caseId', async (c) => {
+  app.get('/ops/cases/:caseId', (c) => {
     const { caseId } = c.req.param();
-    let rec = getCase(caseId);
+    const rec = getCase(caseId);
     if (!rec) return c.json({ error: 'not_found' }, 404);
-    // M4.5: auto-plan on open if not UNKNOWN and plan is empty
-    if (rec.plan.length === 0 && rec.status !== 'UNKNOWN') {
-      rec = (await planAndRun(caseId)) ?? rec;
-    }
     return c.json(rec);
   });
 
@@ -55,7 +51,6 @@ export function createApp() {
       pack,
       jobState: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
       status: pack === 'UNKNOWN_PACK' ? 'UNKNOWN' : 'QUEUED',
-      degraded: false,
       plan: [],
       why: [],
       activationRoute: 'UNKNOWN' as const,
@@ -147,15 +142,9 @@ export function createApp() {
 
   app.post('/admin/toggles', async (c) => {
     const body = (await c.req.json()) as {
-      killUtilityWorker?: boolean;
       addFireConflictCaseId?: string;
       removeFireConflictCaseId?: string;
     };
-    if (typeof body.killUtilityWorker === 'boolean') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (await import('./store')).store.toggles.killUtilityWorker =
-        body.killUtilityWorker;
-    }
     if (body.addFireConflictCaseId) {
       const { store: demoStore } = await import('./store');
       const matches = Array.from(demoStore.casesById.values()).filter((item) =>
@@ -172,7 +161,7 @@ export function createApp() {
         body.removeFireConflictCaseId
       );
     }
-    return c.json({ ok: true, toggles: (await import('./store')).store.toggles.killUtilityWorker });
+    return c.json({ ok: true });
   });
 
   return app;

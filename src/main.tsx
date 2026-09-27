@@ -14,6 +14,14 @@ import { KnowledgeRule } from './admin/knowledge/KnowledgeRule';
 const router = createBrowserRouter([
   { path: '/', element: <App /> },
   {
+    path: '/ops/admin',
+    element: <OpsLayout />,
+    children: [
+      { index: true, element: <Queue /> },
+      { path: 'case/:caseId', element: <CaseDetail /> },
+    ],
+  },
+  {
     path: '/ops/:userId',
     element: <OpsLayout />,
     children: [

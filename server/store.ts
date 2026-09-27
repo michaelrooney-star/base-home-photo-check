@@ -1,7 +1,6 @@
 import { AdminToggles, CaseRecord, DemoStore } from './types';
 
 const makeToggles = (): AdminToggles => ({
-  killUtilityWorker: false,
   fireConflictCaseIds: new Set<string>(),
 });
 

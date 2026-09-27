@@ -14,8 +14,8 @@ export function StatusPill({ children, tone = 'muted' }: { children: ReactNode; 
   return <span className={`console-status console-status-${tone}`}>{children}</span>;
 }
 
-export function statusTone(status: string, degraded = false): StatusTone {
-  if (degraded || status === 'NEEDS_REVIEW') return 'review';
+export function statusTone(status: string, _degraded = false): StatusTone {
+  if (status === 'NEEDS_REVIEW') return 'review';
   if (status === 'OPS_READY') return 'ready';
   if (status === 'BLOCKED') return 'danger';
   if (status === 'QUEUED') return 'queued';
@@ -24,12 +24,12 @@ export function statusTone(status: string, degraded = false): StatusTone {
 
 export function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    OPS_READY: 'Ready for review',
-    QUEUED: 'Waiting to run',
+    OPS_READY: 'Review done',
+    QUEUED: 'Review not done',
     NEEDS_REVIEW: 'Review required',
     BLOCKED: 'Blocked',
     UNKNOWN: 'Setup needed',
-    PENDING: 'Waiting to run',
+    PENDING: 'Review not done',
     RUNNING: 'Running',
     DONE: 'Complete',
     FAILED: 'Failed',
@@ -39,7 +39,7 @@ export function statusLabel(status: string) {
 
 function navItems() {
   return [
-    { href: '/ops/base_admin', label: 'Cases', icon: LayoutList },
+    { href: '/ops/admin', label: 'Cases', icon: LayoutList },
     { href: '/admin', label: 'Demo controls', icon: Settings2 },
     { href: '/admin/knowledge', label: 'Rules library', icon: BookOpen },
   ];
@@ -72,7 +72,7 @@ export function ConsoleShell({ children, userId: _userId = 'base_admin' }: Conso
           <Link to="/" className="console-mobile-brand" aria-label="Base Power home">base<span>.</span></Link>
           <div className="console-topbar-title"><strong>Base Admin</strong></div>
           <span className="console-env-badge">OPS DEMO · local store</span>
-          <div className="console-topbar-actions"><Link to="/" className="console-topbar-link">User view <ArrowRight size={15} /></Link><Link to="/admin" className="console-topbar-link">Admin view <ArrowRight size={15} /></Link></div>
+          <div className="console-topbar-actions"><Link to="/" className="console-topbar-link">User view <ArrowRight size={15} /></Link></div>
         </header>
 
         <main className="console-main">{children}</main>

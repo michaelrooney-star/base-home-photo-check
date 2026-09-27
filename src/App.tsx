@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, Check, LockKeyhole } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Welcome } from './components/Welcome';
 import { GuidedCapture } from './components/GuidedCapture';
 import { Review } from './components/Review';
@@ -35,7 +36,7 @@ export default function App() {
     return()=>context.unregisterTool('get_photo_checklist');
   },[photos,fence,location,screen]);
   return <div className="app-shell">
-    <header className="site-header"><button className="wordmark" onClick={()=>navigate('welcome')} aria-label="Base Power home">base<span className="brand-period">.</span></button><span className="header-divider"/><span className="product-name">Home Photo Check</span><span className="demo-badge">INTERACTIVE DEMO</span><a className="help-link" aria-label="Open Base photo guide in a new tab" href="https://help.basepowercompany.com/en/articles/10280641" target="_blank" rel="noreferrer">Photo guide <ArrowUpRight size={15}/></a></header>
+    <header className="site-header"><button className="wordmark" onClick={()=>navigate('welcome')} aria-label="Base Power home">base<span className="brand-period">.</span></button><span className="header-divider"/><span className="product-name">Home Photo Check</span><span className="demo-badge">INTERACTIVE DEMO</span><div className="header-actions"><a className="help-link" aria-label="Open Base photo guide in a new tab" href="https://help.basepowercompany.com/en/articles/10280641" target="_blank" rel="noreferrer">Photo guide <ArrowUpRight size={15}/></a><Link className="admin-view-link" to="/ops/admin">Admin view <ArrowUpRight size={15}/></Link></div></header>
     <main><nav className="journey" aria-label="Your progress"><span className={screen==='welcome'?'journey-step active':'journey-step done'}><b>{screen==='welcome'?'1':<Check size={14}/>}</b> Get ready</span><span className="journey-line"/><span className={screen==='capture'?'journey-step active':screen==='review'?'journey-step done':'journey-step'}><b>{screen==='review'?<Check size={14}/>:'2'}</b> Take photos</span><span className="journey-line"/><span className={screen==='review'?'journey-step active':'journey-step'}><b>3</b> Review</span></nav>
       {screen==='welcome'&&<Welcome onStart={()=>{setReturnToReview(false);navigate('capture');void camera.start();}}/>}
       {screen==='capture'&&<GuidedCapture photos={photos} current={current} fence={fence} location={location} camera={camera} onFence={changeFence} onLocation={setLocation} onSave={save} onNext={next} onSelect={select} onReview={()=>navigate('review')} onBack={()=>navigate(returnToReview?'review':'welcome')}/>}
