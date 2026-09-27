@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open the Local URL Vite prints (normally `http://localhost:5173`).
+Open the Local URL Vite prints (normally `http://localhost:5173`). The Hono API is proxied at `/api/*` (origin `http://localhost:8787`).
 
 ```sh
 npm run build       # TypeScript checks and production build
@@ -283,85 +283,6 @@ Tuned after a test on iPhones at a real meter, where "Hold steady" never cleared
 - **"Hold steady" only means movement.** While the number is being read, the banner says "Reading the meter number…".
 - **Auto-capture doesn't wait for meter recognition** (about 150 MB, which can be slow or fail on an iPhone). The saved photo waits at most 8 s for it. If recognition still isn't available, a photo with a readable meter number is accepted and marked "not checked" for reviewers; before, it was rejected.
 - **After 5 s,** "Or tap the button to take the photo yourself." appears above the shutter.
-The member app at `/` remains unchanged. Base Operations adds client-case review, role-specific service consoles, a permits knowledge base, and a single Hono API:
-
-- `/` — Home Photo Check (member capture; local-only)
-- `/ops/admin` — Base Admin orchestrator (full install graph)
-- `/ops/permits` — Permits desk (`/api/permits/*`)
-- `/ops/field` — Field / ERP console (`/api/field/*`)
-- `/ops/activation` — Utility & ERCOT activation desk (`/api/activation/*`)
-- `/admin/knowledge` — Permits knowledge base and jurisdiction-pack details
-
-API paths simulate separate services in one process (production would be separate deployables with the same event contracts):
-
-| Service | API prefix | Example events |
-| --- | --- | --- |
-| Base Admin | `/api/ops/*` | joins all system events into one case graph |
-| Permits | `/api/permits/*` | `PermitCheckCompleted`, `PermitCheckRejected` |
-| Field / ERP | `/api/field/*` | `WorkOrderClosed`, `WorkOrderBlocked` |
-| Activation | `/api/activation/*` | `ActivationGateAccepted`, `RegistrationFailed` |
-
-```mermaid
-flowchart LR
-  member[Member_PhotoCheck]
-  permits[Permits_service]
-  field[Field_ERP]
-  activation[Activation_service]
-  admin[Base_Admin]
-  member -->|"PhotosSubmitted"| admin
-  permits -->|"PermitCheckCompleted_or_Rejected"| admin
-  field -->|"WorkOrderClosed_or_Blocked"| admin
-  activation -->|"PTO_or_RegistrationFailed"| admin
-  admin -->|"process_manager_graph"| admin
-```
-
-### 90-second demo script
-
-1. Open **Permits** (`/ops/permits`) → case `perm1mid` (106 S Congress) → reject a city permit check.
-2. Open **Admin** → same case → field node stays `PENDING` (downstream frozen).
-3. Open **Field** → complete work order after permits clear (or block site).
-4. Open **Activation** → case `lel1yrft` (101 S Congress) → fail ERCOT registration → telemetry/dispatch stay gray in Admin graph.
-5. On `qot686kp` (100 S Congress) use **Simulate incoming event** or Activation desk to accept waiting PTO.
-
-Seeded judge cases: `perm1mid` (permits in progress), `qot686kp` (PTO waiting), `lel1yrft` (ERCOT blocked), `608fv0c6` (dispatch-ready).
-
-The visible product language is intentionally Base-oriented:
-
-- **Base Admin** — the single internal operations console used for this demo.
-- **Client cases** — the work queue; each case combines site evidence, permit research, and a workflow plan.
-- **Permits knowledge base** — the jurisdiction packs and rules used to explain workflow decisions.
-
-Run locally:
-
-```sh
-npm install
-npm run dev
-# Web: http://localhost:5173
-# API: proxied at /api/* (origin http://localhost:8787)
-```
-
-Build and tests:
-
-```sh
-npm test
-npm run build
-```
-
-Demo identity:
-
-- `base_admin` — one shared seeded queue; older `/ops/ops_maya` links remain compatible.
-
-### Case statuses
-
-The API keeps stable status codes while the UI uses clearer operator language:
-
-| Code | UI label | Meaning |
-| --- | --- | --- |
-| `OPERATIONAL` | Operational | The case is clear to proceed and activation gates are accepted. |
-| `WAITING` | Waiting | Customer, external-party, or activation information is still pending. |
-| `BLOCKED` | Blocked | A failure, correction, or unexpected response prevents progress. |
-
-The operator UI uses only these three operational statuses; legacy workflow fields remain internal for compatibility.
 
 ## Meter photo: best read frame, full resolution, camera-app fallback
 
@@ -393,25 +314,96 @@ The first number reader was tuned on one Oncor sample, where the number is a big
 - **"Certain"** only when the winner is read confidently and clearly beats every other number on the plate.
 
 **Clear photos aren't rejected for an unconfirmed number.** If the photo is sharp, bright and well framed, and the number is in view but not every digit is confirmed, it's accepted with "Clear photo — Base will read the number" and a note for reviewers with our best reading. Retakes are for bad photos: dark, blurry, cut off, covered, the wrong object, or no number in view.
-The operator view intentionally does not expose workflow stages. It presents one operational status and keeps activation gates, contacts, and external responses as supporting detail.
 
 **Auto-capture** no longer needs a confirmed read: it takes the photo once the number is in view, close enough and the phone steady, or immediately when two reads agree.
 
 `eval/meter` now includes the two real Austin Energy close-ups and the same meters cropped to the guide circle: **23/23**, with no false accepts and no wrong numbers. Before this change, the real meters failed. In a browser with a simulated camera at 1280×720, the Oncor sample and both Austin meters were each captured and read correctly within 5–9 s.
 
+## Application architecture
+
+Home Photo Check is one step in a longer install workflow. Permits, field crews, utilities, and ERCOT each run their own systems of record — Hubspot, ERP, jurisdiction portals, interconnection queues, and so on. This demo shows how to manage that kind of distributed process without replacing those systems: add a thin API layer around each team's tool, emit events when work changes, and let a central orchestrator subscribe so operators get one joined view of every case.
+
+### What this demo assumes
+
+- **Different teams own different stages.** Permits research, field install, and utility/ERCOT activation are separate desks with separate back-office tools.
+- **Each team keeps its own system of record.** The consoles here simulate those tools; they are not a single monolithic database pretending to be five products.
+- **Events are the integration contract.** When a permit check completes, a work order closes, or ERCOT rejects a registration, that team's service emits an event. Base Admin ingests it and updates the case graph — including freezing downstream steps when upstream work fails.
+- **Production would be separate deployables.** In this repo, `/api/permits/*`, `/api/field/*`, `/api/activation/*`, and `/api/ops/*` are API prefixes in one Hono process sharing an in-memory case store. The shape of the APIs and events is what would carry over to real services.
+- **Member capture stays local-only.** The app at `/` does not submit photos into the orchestrator yet; seeded cases include mock site evidence for reviewers.
+
+### What you can open
+
+| Route | Role |
+| --- | --- |
+| `/` | Home Photo Check — member capture (browser-only session) |
+| `/ops/admin` | Base Admin — orchestrator with the full install graph |
+| `/ops/permits` | Permits desk — parallel city, electrical, and fire checks |
+| `/ops/field` | Field / ERP console — work orders and site completion |
+| `/ops/activation` | Activation desk — utility interconnection, ERCOT, telemetry, dispatch |
+| `/admin/knowledge` | Permits knowledge base — jurisdiction packs and rule citations |
+
+Use the view dropdown in the top bar to switch desks. **Reset DB** (in the same menu) clears local changes and restores seed data.
+
+### Simulated services and events
+
+| Service | API prefix | Example events |
+| --- | --- | --- |
+| Base Admin | `/api/ops/*` | joins all system events into one case graph |
+| Permits | `/api/permits/*` | `PermitCheckCompleted`, `PermitCheckRejected` |
+| Field / ERP | `/api/field/*` | `WorkOrderClosed`, `WorkOrderBlocked` |
+| Activation | `/api/activation/*` | `ActivationGateAccepted`, `RegistrationFailed` |
+
+```mermaid
+flowchart LR
+  member[Member_PhotoCheck]
+  permits[Permits_service]
+  field[Field_ERP]
+  activation[Activation_service]
+  admin[Base_Admin]
+  member -->|"PhotosSubmitted"| admin
+  permits -->|"PermitCheckCompleted_or_Rejected"| admin
+  field -->|"WorkOrderClosed_or_Blocked"| admin
+  activation -->|"PTO_or_RegistrationFailed"| admin
+```
+
+### Product language
+
+- **Base Admin** — the single internal operations console that joins events from every simulated service.
+- **Client cases** — the work queue; each case combines site evidence, permit research, and a workflow plan.
+- **Permits knowledge base** — jurisdiction packs and rules that explain why permit nodes pass or fail.
+
+The operator UI intentionally does not expose raw workflow stage codes. It presents one operational status per case and keeps activation gates, contacts, and external responses as supporting detail.
+
+## Simulating a workflow
+
+The goal is to see how distributed teams stay in their own tools while the orchestrator gains visibility. Switch desks from the view dropdown, act on a case, then refresh or reopen **Admin** to see the graph update.
+
+1. **Permits desk** (`/ops/permits`) — open a case with open permit work and complete or reject a check. That represents the permits team updating its own system. In Admin, field install should stay frozen until permits clear (or show blocked if a check is rejected).
+2. **Field desk** (`/ops/field`) — once permits allow it, close or block a work order. That event unlocks or holds activation work in the orchestrator graph.
+3. **Activation desk** (`/ops/activation`) — accept or fail a utility or ERCOT gate (PTO, registration, telemetry, dispatch). A failure should leave downstream activation nodes blocked in Admin.
+4. **Base Admin** (`/ops/admin`) — inspect the full graph, notes, site evidence, and cross-system status for any case. Use **Reset DB** when you want a clean seed state again.
+
+Seeded cases illustrate different points in the lifecycle — for example permits in progress (`perm1mid`), PTO waiting (`qot686kp`), ERCOT blocked (`lel1yrft`), and dispatch-ready (`608fv0c6`). You do not need to memorize IDs; filter the queue by city or status and pick a case that matches the scenario you want to explore.
+
+### Case statuses
+
+The API keeps stable status codes while the UI uses clearer operator language:
+
+| Code | UI label | Meaning |
+| --- | --- | --- |
+| `OPERATIONAL` | Operational | The case is clear to proceed and activation gates are accepted. |
+| `WAITING` | Waiting | Customer, external-party, or activation information is still pending. |
+| `BLOCKED` | Blocked | A failure, correction, or unexpected response prevents progress. |
+
+Legacy workflow fields remain internal for compatibility; the operator-facing surfaces use only these three statuses.
+
 ### Site evidence
 
 Each seeded case includes seven mock customer-submitted photos: meter number, whole meter wall, left side, right side, breaker box, disconnect rating, and adjacent wall. Cases rotate through compact image sets so the site evidence varies without inflating the repository. The files under `public/images/cases` are resized JPEGs and total roughly 1–2 MB.
 
-Demo script:
+### Deployment notes
 
-1. Open `/ops/admin` and compare cases across Austin, Round Rock, Dallas, Houston, and San Antonio.
-2. Inspect the Austin Energy waiting, ERCOT correction, and telemetry waiting cases.
-3. Open the dispatch-ready Austin case to see the Operational state.
-
-Vercel caveats:
-
-- Single serverless function `api/[[...route]].ts` handles all `/api/*`. Ops/Admin share one in‑memory Map (clears on redeploy/cold start).
+- Single serverless function `api/[[...route]].ts` handles all `/api/*`. Ops and Admin share one in-memory `Map` (clears on redeploy or cold start).
 - `vercel.json` rewrites `/ops/*` and `/admin/*` to the SPA entry.
 - No claims of legal “approval” or “permitting”; statuses are limited to Operational / Waiting / Blocked.
 
