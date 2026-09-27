@@ -258,3 +258,22 @@
 .bt-box{border:3px solid #fff;background:#6b7280b3;box-shadow:0 0 0 1px #0008;border-radius:4px}
 .bt-clear{border:2px dashed #22c55e;background:#22c55e33}
 .bt-box em{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);white-space:nowrap;font-style:normal;font-size:12px;font-weight:700;color:#fff;background:#15803d;padding:2px 8px;border-radius:6px}
+
+/* Phone landing page: everything, including Start, fits on one screen without scrolling. */
+@media(max-width:760px){
+  .welcoming .site-header{height:58px}.welcoming .wordmark{font-size:32px;letter-spacing:-3px}
+  .welcoming .journey,.welcoming .eyebrow,.welcoming .site-footer,.welcoming .photo-topline,.welcoming .photo-caption,.welcoming .photo-credit{display:none}
+  .welcoming>main{display:flex;flex-direction:column}
+  .welcoming .welcome-grid{flex:1;margin:0;gap:0;min-height:0}
+  /* The photo takes whatever height is left over (none on a small phone), so the page never scrolls. */
+  .welcoming .welcome-photo{flex:1 1 0;min-height:0;margin:14px 0 16px}
+  .welcoming .welcome-copy{padding:0}
+  .welcoming h1{font-size:34px;letter-spacing:-1.5px;line-height:1.08;margin:clamp(14px,3dvh,28px) 0 10px}
+  .welcoming .intro{font-size:15px;line-height:1.45}
+  .welcoming .quick-facts{margin-top:12px;font-size:13px}
+  .welcoming .prep-list{margin:clamp(14px,3dvh,26px) 0;gap:clamp(10px,2dvh,18px)}
+  .welcoming .prep-icon{width:34px;height:34px}
+  .welcoming .prep-list strong{margin-bottom:2px}.welcoming .prep-list p{font-size:12px;line-height:1.35}
+  .welcoming .start-button{max-width:none}
+  .welcoming .privacy-line{margin-top:10px}
+}
