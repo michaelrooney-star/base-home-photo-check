@@ -6,6 +6,7 @@ import type {
   ActivationSource,
   ActivationSummary,
   ExternalEvent,
+  OperationalStatus,
 } from './types';
 
 const day = 24 * 60 * 60 * 1000;
@@ -20,6 +21,18 @@ const definitions: Record<ActivationGateKey, { label: string; source: Activation
 };
 
 export type ActivationScenario = 'AUSTIN_WAIT' | 'ERCOT_CORRECTION' | 'TELEMETRY_PENDING' | 'DISPATCH_READY';
+
+export function operationalStatus(caseStatus: string, route: ActivationRoute, gates: ActivationGate[]): { status: OperationalStatus; reason: string } {
+  if (caseStatus === 'BLOCKED' || caseStatus === 'NEEDS_REVIEW') {
+    return { status: 'BLOCKED', reason: caseStatus === 'NEEDS_REVIEW' ? 'A review exception needs attention.' : 'The case has a blocking issue.' };
+  }
+  const correction = gates.find((gate) => gate.status === 'FAILED' || gate.status === 'QUESTIONS');
+  if (correction) return { status: 'BLOCKED', reason: correction.issue ?? `${correction.label} requires correction.` };
+  if (route === 'UNKNOWN' || gates.length === 0) return { status: 'WAITING', reason: 'Activation information not configured.' };
+  const pending = gates.find((gate) => gate.status === 'SUBMITTED' || gate.status === 'NOT_STARTED');
+  if (pending) return { status: 'WAITING', reason: pending.nextAction ?? `Waiting for ${pending.source.replaceAll('_', ' ')}.` };
+  return { status: 'OPERATIONAL', reason: 'All activation gates accepted.' };
+}
 
 function gate(key: ActivationGateKey, status: ActivationGateStatus, now: number, partial: Partial<ActivationGate> = {}): ActivationGate {
   return { key, ...definitions[key], status, updatedAt: now, ...partial };
@@ -63,6 +76,8 @@ export function makeActivationState(route: ActivationRoute, scenario: Activation
     addEvent({ type: 'FEEDBACK', source: 'ERCOT', gateKey: g.key, message: g.issue, timestamp: now - day, acknowledged: false });
   }
   if (scenario === 'TELEMETRY_PENDING') {
+    const registration = activationGates.find((item) => item.key === 'ERCOT_REGISTRATION')!;
+    registration.status = 'ACCEPTED';
     const g = activationGates.find((item) => item.key === 'TELEMETRY')!;
     g.status = 'SUBMITTED';
     g.externalRef = 'QSE-TEL-204';

@@ -16,6 +16,7 @@ export type CaseFingerprint = {
 };
 
 export type CaseStatus = 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN';
+export type OperationalStatus = 'OPERATIONAL' | 'WAITING' | 'BLOCKED';
 export type JobState =
   | 'QUEUED'
   | 'PLANNED'
@@ -119,6 +120,24 @@ export type Finding = {
   summary: string;
   citations: Citation[];
   requirement?: 'REQUIRES' | 'NO_REQUIREMENT' | 'UNKNOWN';
+  ruleIds?: string[];
+};
+
+export type Relationship =
+  | { type: 'REQUIRES'; target_rule_id: string }
+  | { type: 'CONFLICTS_WITH'; target_rule_id: string }
+  | { type: 'ADOPTS'; target_rule_id: string }
+  | { type: 'SUPERSEDES'; target_rule_id: string };
+
+export type Rule = {
+  rule_id: string;
+  jurisdiction: string;
+  domain: Finding['domain'];
+  applies_when: string[];
+  requires: string[];
+  relationships: Relationship[];
+  source: { authority: string; document?: string; section?: string; url?: string; retrieved_at?: string };
+  status: 'verified' | 'candidate' | 'superseded';
 };
 
 export type WorkerResult =
@@ -168,6 +187,8 @@ export type DemoStore = {
   seeded: boolean;
   casesById: Map<string, CaseRecord>;
   toggles: AdminToggles;
+  rulesById?: Map<string, Rule>;
+  packToRuleIds?: Map<PackId, string[]>;
 };
 
 export type CreateCaseBody = {

@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, ChevronLeft, ChevronRight, LayoutList, Settings2 } from 'lucide-react';
+import { ArrowRight, BookOpen, ChevronLeft, ChevronRight, LayoutList } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -40,8 +40,7 @@ export function statusLabel(status: string) {
 function navItems() {
   return [
     { href: '/ops/admin', label: 'Cases', icon: LayoutList },
-    { href: '/admin', label: 'Demo controls', icon: Settings2 },
-    { href: '/admin/knowledge', label: 'Rules library', icon: BookOpen },
+    { href: '/admin/knowledge', label: 'Permits knowledge base', icon: BookOpen },
   ];
 }
 
@@ -49,7 +48,7 @@ export function ConsoleShell({ children, userId: _userId = 'base_admin' }: Conso
   const location = useLocation();
   const [railCollapsed, setRailCollapsed] = useState(false);
   const items = navItems();
-  const active = (href: string) => href === '/admin' ? location.pathname === '/admin' : href === '/admin/knowledge' ? location.pathname.startsWith('/admin/knowledge') : location.pathname.startsWith('/ops');
+  const active = (href: string) => href === '/admin/knowledge' ? location.pathname.startsWith('/admin/knowledge') : location.pathname.startsWith('/ops');
 
   return (
     <div className={`console-shell ${railCollapsed ? 'is-rail-collapsed' : ''}`}>

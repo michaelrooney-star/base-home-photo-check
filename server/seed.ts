@@ -134,8 +134,9 @@ function newCase(
   stage: 'QUEUED' | 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'UNKNOWN' = 'QUEUED',
   activationRoute: CaseRecord['activationRoute'] = 'UNKNOWN',
   activationScenario?: ActivationScenario,
+  caseId?: string,
 ): CaseRecord {
-  const id = uid();
+  const id = caseId ?? uid();
   const unknown = pack === 'UNKNOWN_PACK' || stage === 'UNKNOWN';
   const status = unknown ? 'UNKNOWN' : stage;
   const activation = activationScenario
@@ -198,85 +199,36 @@ function mockSitePhotos(set: 'set-a' | 'set-b' | 'set-c'): SitePhoto[] {
 
 export function seedDemoCases() {
   if (store.seeded) return;
-  const cases: CaseRecord[] = [];
 
-  // Austin rich – several cases for Maya
-  for (let i = 0; i < 7; i++) {
-    const fp = makeFingerprint({
-      address: `${100 + i} S Congress Ave`,
-      city: 'Austin',
-      utility: 'Austin Energy',
-    });
-    const activation = [
-      ['AUSTIN_UTILITY_MANAGED', 'AUSTIN_WAIT'],
-      ['ERCOT_ADER', 'ERCOT_CORRECTION'],
-      ['ERCOT_ADER', 'TELEMETRY_PENDING'],
-      ['ERCOT_ADER', 'DISPATCH_READY'],
-    ][i] as [CaseRecord['activationRoute'], ActivationScenario] | undefined;
-    const rec = newCase('base_admin', fp, 'AUSTIN_RICH', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', ['OPS_READY', 'QUEUED', 'NEEDS_REVIEW', 'BLOCKED', 'QUEUED', 'OPS_READY', 'OPS_READY'][i] as 'OPS_READY' | 'QUEUED' | 'NEEDS_REVIEW' | 'BLOCKED', activation?.[0], activation?.[1]);
-    cases.push(rec);
-  }
+  const dataset: Array<{
+    address: string;
+    city: string;
+    county?: string;
+    utility: string;
+    pack: Parameters<typeof newCase>[2];
+    photoSet: 'set-a' | 'set-b' | 'set-c';
+    id?: string;
+    route?: CaseRecord['activationRoute'];
+    scenario?: ActivationScenario;
+  }> = [
+    { id: 'qot686kp', address: '100 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-a', route: 'AUSTIN_UTILITY_MANAGED', scenario: 'AUSTIN_WAIT' },
+    { id: 'lel1yrft', address: '101 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-b', route: 'ERCOT_ADER', scenario: 'ERCOT_CORRECTION' },
+    { id: '63kmuo28', address: '102 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-c', route: 'ERCOT_ADER', scenario: 'TELEMETRY_PENDING' },
+    { id: '608fv0c6', address: '103 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-a', route: 'ERCOT_ADER', scenario: 'DISPATCH_READY' },
+    { address: '104 Barton Springs Rd', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-b', route: 'AUSTIN_UTILITY_MANAGED', scenario: 'AUSTIN_WAIT' },
+    { id: '4x8q6jzs', address: '105 E 6th St', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-c', route: 'ERCOT_ADER', scenario: 'ERCOT_CORRECTION' },
+    { address: '200 E Main St', city: 'Round Rock', county: 'Williamson', utility: 'Oncor', pack: 'ROUNDROCK_ONCOR', photoSet: 'set-a' },
+    { address: '204 E Main St', city: 'Round Rock', county: 'Williamson', utility: 'Oncor', pack: 'ROUNDROCK_ONCOR', photoSet: 'set-b' },
+    { address: '300 Elm St', city: 'Dallas', county: 'Dallas', utility: 'Oncor', pack: 'DALLAS_ONCOR', photoSet: 'set-c' },
+    { address: '312 Ross Ave', city: 'Dallas', county: 'Dallas', utility: 'Oncor', pack: 'DALLAS_ONCOR', photoSet: 'set-a' },
+    { address: '500 Louisiana St', city: 'Houston', county: 'Harris', utility: 'CenterPoint Energy', pack: 'HOUSTON_STUB', photoSet: 'set-b' },
+    { address: '400 Market St', city: 'San Antonio', county: 'Bexar', utility: 'CPS Energy', pack: 'SANANTONIO_STUB', photoSet: 'set-c' },
+  ];
 
-  // Round Rock (Oncor) – for Sam
-  for (let i = 0; i < 4; i++) {
-    const fp = makeFingerprint({
-      address: `${200 + i} E Main St`,
-      city: 'Round Rock',
-      county: 'Williamson',
-      utility: 'Oncor',
-    });
-    const rec = newCase('base_admin', fp, 'ROUNDROCK_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
-    cases.push(rec);
-  }
+  dataset.forEach((item) => {
+    const fp = makeFingerprint({ address: item.address, city: item.city, county: item.county, utility: item.utility });
+    saveCase(newCase('base_admin', fp, item.pack, item.photoSet, 'OPS_READY', item.route ?? 'UNKNOWN', item.scenario, item.id));
+  });
 
-  // Dallas (Oncor) – mix
-  for (let i = 0; i < 3; i++) {
-    const fp = makeFingerprint({
-      address: `${300 + i} Elm St`,
-      city: 'Dallas',
-      county: 'Dallas',
-      utility: 'Oncor',
-    });
-    const rec = newCase('base_admin', fp, 'DALLAS_ONCOR', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'NEEDS_REVIEW' : 'QUEUED');
-    cases.push(rec);
-  }
-
-  // San Antonio (CPS)
-  for (let i = 0; i < 3; i++) {
-    const fp = makeFingerprint({
-      address: `${400 + i} Market St`,
-      city: 'San Antonio',
-      county: 'Bexar',
-      utility: 'CPS Energy',
-    });
-    const rec = newCase('base_admin', fp, 'SANANTONIO_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
-    cases.push(rec);
-  }
-
-  // Houston (CenterPoint)
-  for (let i = 0; i < 2; i++) {
-    const fp = makeFingerprint({
-      address: `${500 + i} Louisiana St`,
-      city: 'Houston',
-      county: 'Harris',
-      utility: 'CenterPoint Energy',
-    });
-    const rec = newCase('base_admin', fp, 'HOUSTON_STUB', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c', i === 0 ? 'BLOCKED' : 'QUEUED');
-    cases.push(rec);
-  }
-
-  // Waco unknown – explicitly UNKNOWN_PACK
-  for (let i = 0; i < 2; i++) {
-    const fp = makeFingerprint({
-      address: `${600 + i} Washington Ave`,
-      city: 'Waco',
-      county: 'McLennan',
-      utility: '—',
-    });
-    const rec = newCase('base_admin', fp, 'UNKNOWN_PACK', `set-${['a', 'b', 'c'][i % 3]}` as 'set-a' | 'set-b' | 'set-c');
-    cases.push(rec);
-  }
-
-  for (const c of cases) saveCase(c);
   store.seeded = true;
 }

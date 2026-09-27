@@ -1,18 +1,35 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { createApp } from './app';
 import { resetStore } from './store';
-import { activationSummary, allowedGateStatus, makeActivationState } from './activation';
+import { activationSummary, allowedGateStatus, makeActivationState, operationalStatus } from './activation';
 
 describe('activation workflow', () => {
   beforeEach(() => resetStore());
 
-  it('seeds distinct Austin and ERCOT readiness scenarios', async () => {
+  it('seeds diverse utility and activation scenarios', async () => {
     const response = await createApp().request('/api/ops/queue/ops_maya');
     const data = await response.json();
     expect(response.status).toBe(200);
     expect(data.cases.some((item: any) => item.activationSummary.source === 'AUSTIN_ENERGY')).toBe(true);
     expect(data.cases.some((item: any) => item.activationSummary.correctionNeeded)).toBe(true);
     expect(data.cases.some((item: any) => item.activationSummary.dispatchReady)).toBe(true);
+    expect(data.cases).toHaveLength(12);
+    expect(new Set(data.cases.map((item: any) => item.fingerprint.city))).toEqual(new Set(['Austin', 'Round Rock', 'Dallas', 'Houston', 'San Antonio']));
+    expect(new Set(data.cases.map((item: any) => item.fingerprint.utility))).toEqual(new Set(['Austin Energy', 'Oncor', 'CenterPoint Energy', 'CPS Energy']));
+    expect(new Set(data.cases.map((item: any) => item.pack))).toEqual(new Set(['AUSTIN_RICH', 'ROUNDROCK_ONCOR', 'DALLAS_ONCOR', 'HOUSTON_STUB', 'SANANTONIO_STUB']));
+    expect(data.cases.filter((item: any) => item.operationalStatus === 'BLOCKED')).toHaveLength(2);
+    expect(data.cases.filter((item: any) => item.operationalStatus === 'OPERATIONAL')).toHaveLength(1);
+    expect(data.cases.filter((item: any) => item.operationalStatus === 'WAITING')).toHaveLength(9);
+  });
+
+  it('derives operational status with blocking conditions taking precedence', () => {
+    const waiting = makeActivationState('AUSTIN_UTILITY_MANAGED', 'AUSTIN_WAIT');
+    const correction = makeActivationState('ERCOT_ADER', 'ERCOT_CORRECTION');
+    const ready = makeActivationState('ERCOT_ADER', 'DISPATCH_READY');
+    expect(operationalStatus('OPS_READY', 'AUSTIN_UTILITY_MANAGED', waiting.activationGates).status).toBe('WAITING');
+    expect(operationalStatus('OPS_READY', 'ERCOT_ADER', correction.activationGates).status).toBe('BLOCKED');
+    expect(operationalStatus('OPS_READY', 'ERCOT_ADER', ready.activationGates).status).toBe('OPERATIONAL');
+    expect(operationalStatus('OPS_READY', 'UNKNOWN', []).reason).toBe('Activation information not configured.');
   });
 
   it('summarizes waiting and correction gates independently', () => {

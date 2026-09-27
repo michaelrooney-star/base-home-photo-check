@@ -1,16 +1,23 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { prettyJSON } from 'hono/pretty-json';
-import { resetStore, listCasesByAssignee, getCase, saveCase } from './store';
+import { resetStore, listCasesByAssignee, getCase, saveCase, ensureRulesLoaded, store } from './store';
 import { seedDemoCases, deriveUtilityType, resolvePack } from './seed';
 import { planAndRun } from './runner';
-import { activationSummary, allowedGateStatus, makeActivationState } from './activation';
-import type { ActivationGateKey, ActivationGateStatus, CreateCaseBody, ExternalEventType } from './types';
+import { activationSummary, allowedGateStatus, operationalStatus } from './activation';
+import type { ActivationGateKey, ActivationGateStatus, CreateCaseBody, ExternalEventType, PackId } from './types';
 
 export function createApp() {
   const app = new Hono().basePath('/api');
   app.use('*', cors());
   app.use('*', prettyJSON());
+
+  const presentCase = (item: any) => ({
+    ...item,
+    operationalStatus: operationalStatus(item.status, item.activationRoute, item.activationGates).status,
+    operationalReason: operationalStatus(item.status, item.activationRoute, item.activationGates).reason,
+    activationSummary: activationSummary(item.activationRoute, item.activationGates, Date.now(), item.externalEvents),
+  });
 
   // Health
   app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
@@ -20,7 +27,7 @@ export function createApp() {
     seedDemoCases();
     const list = listCasesByAssignee('base_admin');
     const cases = list
-      .map((item) => ({ ...item, activationSummary: activationSummary(item.activationRoute, item.activationGates, Date.now(), item.externalEvents) }))
+      .map(presentCase)
       .sort((a, b) => Number(b.activationSummary.overdue || b.activationSummary.correctionNeeded) - Number(a.activationSummary.overdue || a.activationSummary.correctionNeeded));
     return c.json({ userId: 'base_admin', cases });
   });
@@ -29,7 +36,7 @@ export function createApp() {
     const { caseId } = c.req.param();
     const rec = getCase(caseId);
     if (!rec) return c.json({ error: 'not_found' }, 404);
-    return c.json(rec);
+    return c.json(presentCase(rec));
   });
 
   app.post('/ops/cases', async (c) => {
@@ -54,10 +61,11 @@ export function createApp() {
       plan: [],
       why: [],
       activationRoute: 'UNKNOWN' as const,
-      ...makeActivationState('UNKNOWN', 'AUSTIN_WAIT'),
+      activationGates: [],
+      externalEvents: [],
     };
     saveCase(rec);
-    return c.json(rec, 201);
+    return c.json(presentCase(rec), 201);
   });
 
   app.post('/ops/cases/:caseId/plan', async (c) => {
@@ -75,7 +83,7 @@ export function createApp() {
     event.acknowledged = true;
     rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'ACKNOWLEDGED', source: event.source, gateKey: event.gateKey, message: `Feedback acknowledged: ${event.message}`, timestamp: Date.now(), acknowledged: true });
     saveCase(rec);
-    return c.json(rec);
+    return c.json(presentCase(rec));
   });
 
   app.post('/ops/cases/:caseId/activation/gates/:gateKey/assign', async (c) => {
@@ -89,7 +97,7 @@ export function createApp() {
     gate.updatedAt = Date.now();
     rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'ASSIGNED', source: gate.source, gateKey: gate.key, message: `${gate.label} assigned to ${body.owner}.`, timestamp: gate.updatedAt, acknowledged: true, assignedOwner: body.owner });
     saveCase(rec);
-    return c.json(rec);
+    return c.json(presentCase(rec));
   });
 
   app.post('/ops/cases/:caseId/activation/gates/:gateKey/advance', async (c) => {
@@ -104,7 +112,7 @@ export function createApp() {
     gate.updatedAt = Date.now();
     rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'STATUS_CHANGED', source: gate.source, gateKey: gate.key, message: body.message ?? `${gate.label} moved from ${previous} to ${body.status}.`, timestamp: gate.updatedAt, acknowledged: true, assignedOwner: gate.owner });
     saveCase(rec);
-    return c.json(rec);
+    return c.json(presentCase(rec));
   });
 
   app.post('/ops/cases/:caseId/activation/gates/:gateKey/task', (c) => {
@@ -116,7 +124,7 @@ export function createApp() {
     rec.externalEvents.push({ id: `evt_${rec.externalEvents.length + 1}`, type: 'TASK_CREATED', source: gate.source, gateKey: gate.key, message: gate.nextAction ?? gate.issue ?? `Follow up on ${gate.label}.`, timestamp: now, acknowledged: true, assignedOwner: gate.owner });
     gate.updatedAt = now;
     saveCase(rec);
-    return c.json(rec);
+    return c.json(presentCase(rec));
   });
 
   // Admin
@@ -132,6 +140,35 @@ export function createApp() {
         }, {}),
       },
     });
+  });
+
+  app.get('/admin/knowledge/packs', (c) => {
+    ensureRulesLoaded();
+    const packs = awaitPackList();
+    const data = packs.map((pack) => {
+      const ruleIds = store.packToRuleIds?.get(pack.id) ?? [];
+      const rules = ruleIds.map((id) => store.rulesById?.get(id)).filter(Boolean) as Array<{ status: string }>;
+      const byStatus = rules.reduce<Record<string, number>>((acc, rule) => {
+        acc[rule.status] = (acc[rule.status] ?? 0) + 1;
+        return acc;
+      }, {});
+      return { packId: pack.id, name: pack.name, counts: { total: ruleIds.length, byStatus } };
+    });
+    return c.json({ packs: data });
+  });
+
+  app.get('/admin/knowledge/packs/:packId', (c) => {
+    ensureRulesLoaded();
+    const packId = c.req.param('packId') as PackId;
+    const ruleIds = store.packToRuleIds?.get(packId) ?? [];
+    return c.json({ packId, rules: ruleIds.map((id) => store.rulesById?.get(id)).filter(Boolean) });
+  });
+
+  app.get('/admin/knowledge/rules/:ruleId', (c) => {
+    ensureRulesLoaded();
+    const rule = store.rulesById?.get(c.req.param('ruleId'));
+    if (!rule) return c.json({ error: 'not_found' }, 404);
+    return c.json(rule);
   });
 
   app.post('/admin/reset', (c) => {
@@ -165,4 +202,15 @@ export function createApp() {
   });
 
   return app;
+}
+
+function awaitPackList(): { id: PackId; name: string }[] {
+  return [
+    { id: 'AUSTIN_RICH', name: 'Austin (Rich)' },
+    { id: 'ROUNDROCK_ONCOR', name: 'Round Rock (Oncor)' },
+    { id: 'DALLAS_ONCOR', name: 'Dallas (Oncor)' },
+    { id: 'HOUSTON_STUB', name: 'Houston (stub)' },
+    { id: 'SANANTONIO_STUB', name: 'San Antonio (stub)' },
+    { id: 'UNKNOWN_PACK', name: 'Unknown' },
+  ];
 }

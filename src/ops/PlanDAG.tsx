@@ -10,7 +10,7 @@ export type PlanNodeVM = {
   state: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
   // Minimal hints to colorize
   conflict?: boolean; // e.g., fire NO_REQUIREMENT vs verified
-  degraded?: boolean; // utility fallback used
+  degraded?: boolean; // retained for compatibility with older plan payloads
   failed?: boolean; // explicit failure
   attempts?: number;
 };
