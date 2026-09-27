@@ -283,6 +283,49 @@ Tuned after a test on iPhones at a real meter, where "Hold steady" never cleared
 - **"Hold steady" only means movement.** While the number is being read, the banner says "Reading the meter number…".
 - **Auto-capture doesn't wait for meter recognition** (about 150 MB, which can be slow or fail on an iPhone). The saved photo waits at most 8 s for it. If recognition still isn't available, a photo with a readable meter number is accepted and marked "not checked" for reviewers; before, it was rejected.
 - **After 5 s,** "Or tap the button to take the photo yourself." appears above the shutter.
+The member app at `/` remains unchanged. Base Operations adds client-case review, a permits knowledge base, and a single Hono API:
+
+- `/ops/admin` — Base Admin client cases and case detail
+- `/admin/knowledge` — Permits knowledge base and jurisdiction-pack details
+- API: `/api/ops/*`, `/api/admin/*` — one Hono catch‑all with a shared in‑memory demo store
+
+The visible product language is intentionally Base-oriented:
+
+- **Base Admin** — the single internal operations console used for this demo.
+- **Client cases** — the work queue; each case combines site evidence, permit research, and a workflow plan.
+- **Permits knowledge base** — the jurisdiction packs and rules used to explain workflow decisions.
+
+Run locally:
+
+```sh
+npm install
+npm run dev
+# Web: http://localhost:5173
+# API: proxied at /api/* (origin http://localhost:8787)
+```
+
+Build and tests:
+
+```sh
+npm test
+npm run build
+```
+
+Demo identity:
+
+- `base_admin` — one shared seeded queue; older `/ops/ops_maya` links remain compatible.
+
+### Case statuses
+
+The API keeps stable status codes while the UI uses clearer operator language:
+
+| Code | UI label | Meaning |
+| --- | --- | --- |
+| `OPERATIONAL` | Operational | The case is clear to proceed and activation gates are accepted. |
+| `WAITING` | Waiting | Customer, external-party, or activation information is still pending. |
+| `BLOCKED` | Blocked | A failure, correction, or unexpected response prevents progress. |
+
+The operator UI uses only these three operational statuses; legacy workflow fields remain internal for compatibility.
 
 ## Meter photo: best read frame, full resolution, camera-app fallback
 
@@ -314,8 +357,25 @@ The first number reader was tuned on one Oncor sample, where the number is a big
 - **"Certain"** only when the winner is read confidently and clearly beats every other number on the plate.
 
 **Clear photos aren't rejected for an unconfirmed number.** If the photo is sharp, bright and well framed, and the number is in view but not every digit is confirmed, it's accepted with "Clear photo — Base will read the number" and a note for reviewers with our best reading. Retakes are for bad photos: dark, blurry, cut off, covered, the wrong object, or no number in view.
+The operator view intentionally does not expose workflow stages. It presents one operational status and keeps activation gates, contacts, and external responses as supporting detail.
 
 **Auto-capture** no longer needs a confirmed read: it takes the photo once the number is in view, close enough and the phone steady, or immediately when two reads agree.
 
 `eval/meter` now includes the two real Austin Energy close-ups and the same meters cropped to the guide circle: **23/23**, with no false accepts and no wrong numbers. Before this change, the real meters failed. In a browser with a simulated camera at 1280×720, the Oncor sample and both Austin meters were each captured and read correctly within 5–9 s.
+
+### Site evidence
+
+Each seeded case includes seven mock customer-submitted photos: meter number, whole meter wall, left side, right side, breaker box, disconnect rating, and adjacent wall. Cases rotate through compact image sets so the site evidence varies without inflating the repository. The files under `public/images/cases` are resized JPEGs and total roughly 1–2 MB.
+
+Demo script:
+
+1. Open `/ops/admin` and compare cases across Austin, Round Rock, Dallas, Houston, and San Antonio.
+2. Inspect the Austin Energy waiting, ERCOT correction, and telemetry waiting cases.
+3. Open the dispatch-ready Austin case to see the Operational state.
+
+Vercel caveats:
+
+- Single serverless function `api/[[...route]].ts` handles all `/api/*`. Ops/Admin share one in‑memory Map (clears on redeploy/cold start).
+- `vercel.json` rewrites `/ops/*` and `/admin/*` to the SPA entry.
+- No claims of legal “approval” or “permitting”; statuses are limited to Operational / Waiting / Blocked.
 

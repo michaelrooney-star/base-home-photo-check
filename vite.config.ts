@@ -8,6 +8,11 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss(), ...(mode === 'https' ? [basicSsl()] : [])],
   worker: { format: 'es' },
+  server: {
+    proxy: {
+      '/api': { target: 'http://localhost:8787', changeOrigin: true },
+    },
+  },
   // Pre-bundle the analyser worker's dependencies up front, so the first visit doesn't trigger a dev-server reload.
   optimizeDeps: { exclude: ['@huggingface/transformers'], include: ['@gutenye/ocr-common', '@gutenye/ocr-common/splitIntoLineImages', 'onnxruntime-web/webgpu'] },
 }));
