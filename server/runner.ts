@@ -1,4 +1,5 @@
 import { store, getCase, saveCase } from './store';
+import { attachWorkflow } from './workflow';
 import {
   CaseRecord,
   Finding,
@@ -207,6 +208,7 @@ export async function planAndRun(caseId: string): Promise<CaseRecord | undefined
   }
 
   n2.state = 'DONE';
+  attachWorkflow(rec);
   saveCase(rec);
   return rec;
 }

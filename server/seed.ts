@@ -1,6 +1,7 @@
 import { saveCase, store } from './store';
 import {
   CaseFingerprint,
+  CaseNote,
   CaseRecord,
   Finding,
   PackId,
@@ -8,6 +9,7 @@ import {
   SitePhoto,
 } from './types';
 import { makeActivationState, type ActivationScenario } from './activation';
+import { attachWorkflow } from './workflow';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -135,6 +137,7 @@ function newCase(
   activationRoute: CaseRecord['activationRoute'] = 'UNKNOWN',
   activationScenario?: ActivationScenario,
   caseId?: string,
+  notes: CaseNote[] = [],
 ): CaseRecord {
   const id = caseId ?? uid();
   const unknown = pack === 'UNKNOWN_PACK' || stage === 'UNKNOWN';
@@ -149,7 +152,7 @@ function newCase(
     : stage === 'BLOCKED' || stage === 'NEEDS_REVIEW'
       ? { organization: fp.utility, name: 'Utility operations contact', email: 'utility-ops-demo@example.com', phone: '(512) 555-0152', url: fp.utility === 'Austin Energy' ? 'https://www.austinenergy.com/' : undefined, note: 'Demo contact — follow up on the blocked external requirement.' }
       : undefined;
-  return {
+  return attachWorkflow({
     id,
     created_at: Date.now(),
     assignee,
@@ -163,7 +166,9 @@ function newCase(
     activationRoute,
     ...activation,
     followUpContact,
-  };
+    workflow: { nodes: [], events: [] },
+    notes,
+  });
 }
 
 function stagedPlan(stage: 'OPS_READY' | 'NEEDS_REVIEW' | 'BLOCKED'): PlanNode[] {
@@ -210,9 +215,10 @@ export function seedDemoCases() {
     id?: string;
     route?: CaseRecord['activationRoute'];
     scenario?: ActivationScenario;
+    notes?: CaseNote[];
   }> = [
-    { id: 'qot686kp', address: '100 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-a', route: 'AUSTIN_UTILITY_MANAGED', scenario: 'AUSTIN_WAIT' },
-    { id: 'lel1yrft', address: '101 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-b', route: 'ERCOT_ADER', scenario: 'ERCOT_CORRECTION' },
+    { id: 'qot686kp', address: '100 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-a', route: 'AUSTIN_UTILITY_MANAGED', scenario: 'AUSTIN_WAIT', notes: [{ id: 'note_qot1', author: 'Maya R.', body: 'Called Austin Energy interconnection desk — waiting on PTO confirmation.', createdAt: Date.now() - 86400000 * 2 }] },
+    { id: 'lel1yrft', address: '101 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-b', route: 'ERCOT_ADER', scenario: 'ERCOT_CORRECTION', notes: [{ id: 'note_lel1', author: 'Jordan K.', body: 'Premise ID mismatch — customer sent corrected utility bill for resubmission.', createdAt: Date.now() - 86400000 }] },
     { id: '63kmuo28', address: '102 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-c', route: 'ERCOT_ADER', scenario: 'TELEMETRY_PENDING' },
     { id: '608fv0c6', address: '103 S Congress Ave', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-a', route: 'ERCOT_ADER', scenario: 'DISPATCH_READY' },
     { address: '104 Barton Springs Rd', city: 'Austin', utility: 'Austin Energy', pack: 'AUSTIN_RICH', photoSet: 'set-b', route: 'AUSTIN_UTILITY_MANAGED', scenario: 'AUSTIN_WAIT' },
@@ -227,7 +233,7 @@ export function seedDemoCases() {
 
   dataset.forEach((item) => {
     const fp = makeFingerprint({ address: item.address, city: item.city, county: item.county, utility: item.utility });
-    saveCase(newCase('base_admin', fp, item.pack, item.photoSet, 'OPS_READY', item.route ?? 'UNKNOWN', item.scenario, item.id));
+    saveCase(newCase('base_admin', fp, item.pack, item.photoSet, 'OPS_READY', item.route ?? 'UNKNOWN', item.scenario, item.id, item.notes ?? []));
   });
 
   store.seeded = true;

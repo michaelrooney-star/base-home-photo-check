@@ -1,5 +1,6 @@
-import { AlertCircle, Check, Clock3, ExternalLink, UserRound, Zap } from 'lucide-react';
-import { StatusPill } from '../components/ConsoleShell';
+import { ExternalLink, RefreshCw, UserRound, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { WorkflowGraph, bottleneckId, type SystemEventVM, type WorkflowNodeVM } from './WorkflowGraph';
 
 export type ActivationGateVM = {
   key: string;
@@ -34,24 +35,97 @@ export type FollowUpContactVM = {
   note?: string;
 };
 
-export function ActivationReadiness({ route, gates, events, followUpContact }: { route: string; gates: ActivationGateVM[]; events: ExternalEventVM[]; followUpContact?: FollowUpContactVM }) {
+type Props = {
+  route: string;
+  gates: ActivationGateVM[];
+  events: ExternalEventVM[];
+  followUpContact?: FollowUpContactVM;
+  workflow?: { nodes: WorkflowNodeVM[]; events: SystemEventVM[] };
+  caseId: string;
+  onWorkflowChange?: () => void;
+};
 
-  const accepted = gates.filter((g) => g.status === 'ACCEPTED').length;
-  const ready = gates.length > 0 && accepted === gates.length;
-  const blockedGate = gates.find((g) => g.status !== 'ACCEPTED');
-  return <section className="console-activation-section">
-    <div className="console-activation-heading"><div><p className="console-eyebrow"><span /> ACTIVATION READINESS</p><h2>{ready ? 'Dispatch-ready' : 'Installed battery gates'}</h2><p>External approvals and operating qualification are tracked separately from site review.</p></div><span className="console-route-badge"><Zap size={13} /> {route.replaceAll('_', ' ')}</span></div>
-    <div className="console-activation-progress"><span><strong>{accepted}</strong> of {gates.length} gates accepted</span><div><i style={{ width: `${gates.length ? (accepted / gates.length) * 100 : 0}%` }} /></div></div>
-    {followUpContact && <div className="console-follow-up"><div className="console-follow-up-icon"><UserRound size={17} /></div><div className="console-follow-up-main"><span><strong>Waiting on:</strong> {blockedGate?.label ?? 'Activation follow-up'}</span><span><strong>Contact:</strong> {followUpContact.organization} · {followUpContact.name}</span>{followUpContact.note && <small>{followUpContact.note}</small>}</div>{followUpContact.url && <a className="console-follow-up-link" href={followUpContact.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open contact</a>}</div>}
-    {gates.length > 0 ? <div className="console-gate-list">{gates.map((gate) => {
-      const overdue = Boolean(gate.dueAt && gate.dueAt < Date.now() && gate.status !== 'ACCEPTED');
-      const tone = gate.status === 'ACCEPTED' ? 'ready' : gate.status === 'QUESTIONS' || gate.status === 'FAILED' ? 'danger' : gate.status === 'SUBMITTED' ? 'queued' : 'muted';
-      const gateResponse = events.slice().reverse().find((event) => event.gateKey === gate.key && (event.type === 'FEEDBACK' || event.type === 'STATUS_CHANGED'));
-      return <article className={`console-gate-card is-${tone}`} key={gate.key}>
-        <div className="console-gate-icon">{gate.status === 'ACCEPTED' ? <Check size={16} /> : gate.status === 'QUESTIONS' || gate.status === 'FAILED' ? <AlertCircle size={16} /> : <Clock3 size={16} />}</div>
-        <div className="console-gate-main"><div className="console-gate-title"><strong>{gate.label}</strong><StatusPill tone={tone}>{gate.status.replaceAll('_', ' ')}</StatusPill></div><div className="console-gate-meta"><span>{sourceLabel(gate.source)}</span>{gate.externalRef && <span>Ref {gate.externalRef}</span>}{gate.owner && <span><UserRound size={12} /> {gate.owner}</span>}{overdue && <b>Overdue</b>}</div>{gate.status !== 'ACCEPTED' && followUpContact && <p className="console-gate-contact"><strong>Contact:</strong> {followUpContact.organization} · {followUpContact.name} · {followUpContact.email} · {followUpContact.phone}</p>}{gateResponse && <p className="console-gate-response"><strong>External response:</strong> {gateResponse.message}</p>}{gate.issue && <p className="console-gate-issue">{gate.issue}</p>}<p className="console-gate-action">Next: {gate.nextAction ?? (gate.status === 'ACCEPTED' ? 'No action required' : 'Start this gate')}</p></div>
-      </article>;
-    })}</div> : <div className="console-empty-inline">Waiting · Activation information not configured</div>}
-  </section>;
+export function ActivationReadiness({ route, gates, workflow, followUpContact, caseId, onWorkflowChange }: Props) {
+  const nodes = workflow?.nodes ?? [];
+  const wfEvents = workflow?.events ?? [];
+  const accepted = nodes.filter((g) => g.state === 'DONE').length;
+  const ready = nodes.length > 0 && accepted === nodes.length;
+  const blocked = nodes.find((g) => g.state === 'BLOCKED');
+  const waiting = nodes.find((g) => g.state === 'WAITING_EXTERNAL');
+  const focus = blocked ?? waiting;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestMsg, setIngestMsg] = useState('');
+
+  useEffect(() => {
+    if (!selectedId && nodes.length) setSelectedId(bottleneckId(nodes));
+  }, [nodes, selectedId]);
+
+  async function simulateIngest() {
+    setIngesting(true);
+    setIngestMsg('');
+    try {
+      const res = await fetch(`/api/ops/cases/${caseId}/workflow/ingest`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setIngestMsg(data.message ?? 'Nothing to simulate.');
+        return;
+      }
+      setIngestMsg(data.ingest?.message ?? 'Event ingested.');
+      onWorkflowChange?.();
+    } catch {
+      setIngestMsg('Could not reach the API.');
+    } finally {
+      setIngesting(false);
+    }
+  }
+
+  return (
+    <section className="console-activation-section">
+      <div className="console-activation-heading">
+        <div>
+          <p className="console-eyebrow"><span /> OPS MANAGER</p>
+          <h2>{ready ? 'All systems clear' : 'Workflow across systems'}</h2>
+          <p>Events from Hubspot, ERP, permit research, field crews, and utilities — joined in one graph.</p>
+        </div>
+        <span className="console-route-badge"><Zap size={13} /> {route.replaceAll('_', ' ')}</span>
+      </div>
+      <div className="console-activation-progress">
+        <span><strong>{accepted}</strong> of {nodes.length} steps complete</span>
+        <div><i style={{ width: `${nodes.length ? (accepted / nodes.length) * 100 : 0}%` }} /></div>
+      </div>
+      {followUpContact && focus && (
+        <div className="console-follow-up">
+          <div className="console-follow-up-icon"><UserRound size={17} /></div>
+          <div className="console-follow-up-main">
+            <span><strong>{blocked ? 'Blocked on' : 'Waiting on'}:</strong> {focus.label}</span>
+            <span><strong>Contact:</strong> {followUpContact.organization} · {followUpContact.name}</span>
+            {followUpContact.note && <small>{followUpContact.note}</small>}
+          </div>
+          {followUpContact.url && (
+            <a className="console-follow-up-link" href={followUpContact.url} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} /> Open contact
+            </a>
+          )}
+        </div>
+      )}
+      <div className="console-workflow-toolbar">
+        <button className="console-refresh-button" type="button" onClick={() => void simulateIngest()} disabled={ingesting}>
+          <RefreshCw size={14} className={ingesting ? 'console-spin' : ''} />
+          {ingesting ? 'Simulating…' : 'Simulate incoming event'}
+        </button>
+        {ingestMsg && <span className="console-control-feedback">{ingestMsg}</span>}
+      </div>
+      {nodes.length > 0 ? (
+        <WorkflowGraph nodes={nodes} events={wfEvents} selectedId={selectedId} onSelect={setSelectedId} />
+      ) : (
+        <div className="console-empty-inline">No workflow configured for this case.</div>
+      )}
+      {gates.length > 0 && (
+        <p className="console-workflow-legacy-note">
+          {gates.filter((g) => g.status !== 'ACCEPTED').length} activation gate{gates.filter((g) => g.status !== 'ACCEPTED').length === 1 ? '' : 's'} still open in source systems.
+        </p>
+      )}
+    </section>
+  );
 }
-function sourceLabel(source: string) { return source.replaceAll('_', ' '); }
