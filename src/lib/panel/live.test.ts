@@ -20,6 +20,9 @@ describe('live guidance: breaker box', () => {
   it('recognises the meter and points her to the breaker box', () => {
     expect(guideStep({ ...base, look: at({ subject: subject('electric_meter') }) }).text).toBe('That’s the meter — find the breaker box.');
   });
+  it('only names the meter when the recognizer is sure; a close call gets the neutral message', () => {
+    expect(guideStep({ ...base, look: at({ subject: subject('electric_meter', 0.45) }) }).text).toBe('Point at your breaker box.');
+  });
   it('asks her to step back when only part of the box is in view', () => {
     expect(guideStep({ ...base, look: at({ subject: subject('breaker_panel'), framing: framing(0.8) }) }).text).toBe('Step back to fit the whole box.');
   });

@@ -22,7 +22,7 @@ export type StepResult = {
   improve?: string;
 };
 
-export const STEP_RULES = { minLuma: 45, minSharpness: 15, minBreaker: 0.4 };
+export const STEP_RULES = { minLuma: 45, minSharpness: 15, minBreaker: 0.4, /** Only say "that's your meter" when sure. */ minMeter: 0.6 };
 
 type Quality = { luma: number; sharpness: number };
 const quality = (q: Quality): { chip: Chip; fix: string | null } => {
@@ -36,7 +36,7 @@ export function decideBreaker(e: Quality & { subject: ClassResult<SubjectClass> 
   const s = e.subject?.status === 'ok' ? e.subject : null;
   const isPanel = !s || s.top === 'breaker_panel' || s.probs.breaker_panel >= STEP_RULES.minBreaker;
   const fix = !isPanel
-    ? s!.top === 'electric_meter' ? 'That’s your meter — now show the breaker box (the panel of switches).' : 'We can’t see a breaker box. Show the whole panel.'
+    ? s!.top === 'electric_meter' && s!.probs.electric_meter >= STEP_RULES.minMeter ? 'That’s your meter — now show the breaker box (the panel of switches).' : 'We can’t see a breaker box. Show the whole panel.'
     : q.fix;
   const partial = !fix && e.framing?.status === 'ok' && e.framing.probs.part_of_panel >= MAX_PART_OF_PANEL;
   return {

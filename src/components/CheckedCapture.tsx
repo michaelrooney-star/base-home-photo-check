@@ -28,6 +28,7 @@ const LOOKING_FOR: Record<CheckedStep, string[]> = {
 };
 const REJECTIONS_BEFORE_OVERRIDE = 2;
 
+const debug = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export function CheckedCapture({ camera, step, sample, extra, canUse = true, onAccept }: Props) {
@@ -38,6 +39,7 @@ export function CheckedCapture({ camera, step, sample, extra, canUse = true, onA
   const [rejections, setRejections] = useState(0);
   const [live, setLive] = useState<{ tone: Tone; text: string }>({ tone: 'search', text: 'Getting ready…' });
   const [recognition, setRecognition] = useState<ModelState>('loading');
+  const [seenDebug, setSeenDebug] = useState<unknown>(null);
   const [error, setError] = useState('');
   const [videoReady, setVideoReady] = useState(false);
   const video = useRef<HTMLVideoElement>(null), file = useRef<HTMLInputElement>(null), resultRef = useRef<HTMLDivElement>(null);
@@ -108,7 +110,10 @@ export function CheckedCapture({ camera, step, sample, extra, canUse = true, onA
           if (mock || r) next = { at: performance.now(), scene: mock ?? (r?.scene as Look['scene']) ?? null };
         }
         if (!alive) return;
-        if (next) { look = next; streak = whatWeSee(step, next) === 'target' ? streak + 1 : 0; }
+        if (next) {
+          look = next; streak = whatWeSee(step, next) === 'target' ? streak + 1 : 0;
+          if (debug) setSeenDebug({ seen: whatWeSee(step, next), streak, ...Object.fromEntries(Object.entries(next).filter(([k]) => k !== 'at').map(([k, v]) => [k, v && typeof v === 'object' && 'probs' in v ? Object.fromEntries(Object.entries(v.probs as Record<string, number>).map(([c, p]) => [c, p.toFixed(2)])) : v])) });
+        }
         await sleep(next ? 600 : 1500);
       }
     })();
@@ -160,6 +165,7 @@ export function CheckedCapture({ camera, step, sample, extra, canUse = true, onA
       <details className="all-checks"><summary>Details</summary><p className="purpose">{r.details}</p>{r.improve && <p className="purpose">{r.line}</p>}</details>
     </div>}
 
+    {debug && <pre className="meter-debug">{JSON.stringify({ recognition, live: seenDebug }, null, 1)}</pre>}
     <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="sr-only" tabIndex={-1} aria-label="Choose a photo from your device"
       onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; if (f.size > 25 * 1024 * 1024) { setError('Choose an image smaller than 25 MB.'); return; } void check({ url: URL.createObjectURL(f), source: 'upload' }); }} />
   </>;

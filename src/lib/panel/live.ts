@@ -34,7 +34,7 @@ export function whatWeSee(step: CheckedStep, look: Look | null): Seen | null {
   if (step === 'breaker') {
     const s = look.subject?.status === 'ok' ? look.subject : null;
     if (!s) return null;
-    if (!(s.top === 'breaker_panel' || s.probs.breaker_panel >= STEP_RULES.minBreaker)) return s.top === 'electric_meter' ? 'meter' : 'wrong';
+    if (!(s.top === 'breaker_panel' || s.probs.breaker_panel >= STEP_RULES.minBreaker)) return s.top === 'electric_meter' && s.probs.electric_meter >= STEP_RULES.minMeter ? 'meter' : 'wrong';
     return look.framing?.status === 'ok' && look.framing.probs.part_of_panel >= MAX_PART_OF_PANEL ? 'part' : 'target';
   }
   const sc = look.scene?.status === 'ok' ? look.scene : null;
