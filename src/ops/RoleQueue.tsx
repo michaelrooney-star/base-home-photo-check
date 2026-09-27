@@ -83,7 +83,7 @@ export function RoleQueue({ config }: { config: RoleConfig }) {
                       <span className="console-muted-step">—</span>
                     )}
                   </td>
-                  <td>
+                  <td className="console-status-cell">
                     <StatusPill tone={tone(row.operationalStatus)}>{label(row.operationalStatus)}</StatusPill>
                     <small className="console-status-reason">{row.operationalReason}</small>
                   </td>

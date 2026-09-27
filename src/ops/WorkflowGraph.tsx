@@ -219,8 +219,8 @@ type Layout = {
 function useLayout(nodes: WorkflowNodeVM[], containerWidth: number, isMobile: boolean): Layout {
   const laneGap = isMobile ? 0 : 48;
   const rowGap = 12;
-  const nodeW = isMobile ? Math.max(220, containerWidth - 24) : 168;
-  const nodeH = isMobile ? 56 : 50;
+  const nodeW = isMobile ? Math.max(220, containerWidth - 24) : 196;
+  const nodeH = isMobile ? 56 : 64;
   const xBase = 12;
   const yBase = 28;
   const pos: Record<string, { x: number; y: number }> = {};

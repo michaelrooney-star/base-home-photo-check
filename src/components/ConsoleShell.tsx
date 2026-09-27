@@ -2,7 +2,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { ROLE_CONFIGS, VIEW_LINKS, type ConsoleRole } from '../ops/roleConfig';
+import { ViewSwitcher } from './ViewSwitcher';
+import { ROLE_CONFIGS, type ConsoleRole } from '../ops/roleConfig';
 
 type ConsoleShellProps = {
   children: ReactNode;
@@ -51,11 +52,6 @@ export function ConsoleShell({ children, role = 'admin' }: ConsoleShellProps) {
     return location.pathname.startsWith(href);
   };
 
-  const viewActive = (href: string) => {
-    if (href === '/') return location.pathname === '/';
-    return location.pathname.startsWith(href);
-  };
-
   return (
     <div className={`console-shell ${railCollapsed ? 'is-rail-collapsed' : ''}`}>
       <aside className="console-rail" aria-label="Console navigation">
@@ -75,7 +71,7 @@ export function ConsoleShell({ children, role = 'admin' }: ConsoleShellProps) {
             </Link>
           ))}
         </nav>
-        <div className="console-rail-note"><span className="console-live-dot" /> Demo store resets on cold start</div>
+        <div className="console-rail-note"><span className="console-live-dot" /> Use the view menu to switch desks or reset seed data</div>
       </aside>
 
       <div className="console-surface">
@@ -83,11 +79,9 @@ export function ConsoleShell({ children, role = 'admin' }: ConsoleShellProps) {
           <Link to="/" className="console-mobile-brand" aria-label="Base Power home">base<span>.</span></Link>
           <div className="console-topbar-title"><strong>{config.topbarTitle}</strong></div>
           <span className="console-env-badge">OPS DEMO · local store</span>
-          <nav className="console-view-switcher" aria-label="Switch view">
-            {VIEW_LINKS.map((link) => (
-              <Link key={link.href} to={link.href} className={viewActive(link.href) ? 'is-active' : ''}>{link.label}</Link>
-            ))}
-          </nav>
+          <div className="console-topbar-actions">
+            <ViewSwitcher />
+          </div>
         </header>
 
         <main className="console-main">{children}</main>
