@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, CircleAlert, Download, LockKeyhole, Minus, Pencil, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, CircleAlert, Download, LockKeyhole, Pencil } from 'lucide-react';
 import { buildReport, reportText, type Report } from '../lib/report';
 import type { Answer, Notes, PhotoId, Photos } from '../lib/photos';
 
@@ -31,8 +31,11 @@ async function download(r: Report, photos: Photos) {
 export function Review(p: Props) {
   const r = buildReport(p.photos, p.fence, p.location, p.notes);
   const [saving, setSaving] = useState(false);
+  // One screen at a time: the photos, then a few questions, then the finish page.
+  const [stage, setStage] = useState<'photos' | 'questions'>('photos');
   const samples = Object.values(p.photos).filter(ph => ph?.source === 'sample').length;
-  const top = <div className="capture-topbar"><button className="text-button" onClick={p.finished ? p.onEdit : p.onBack}><ArrowLeft size={16} /> {p.finished ? 'Back to review' : 'Back to photos'}</button><span className="small-private"><LockKeyhole size={13} /> Nothing is uploaded</span></div>;
+  const back = p.finished ? p.onEdit : stage === 'questions' ? () => setStage('photos') : p.onBack;
+  const top = <div className="capture-topbar"><button className="text-button" onClick={back}><ArrowLeft size={16} /> {p.finished ? 'Back to review' : stage === 'questions' ? 'Back to your photos' : 'Back to taking photos'}</button><span className="small-private"><LockKeyhole size={13} /> Nothing is uploaded</span></div>;
 
   if (p.finished) return <section className="review-page">
     {top}
@@ -58,38 +61,36 @@ export function Review(p: Props) {
     </section>
   </section>;
 
-  return <section className="review-page">
+  if (stage === 'questions') return <section className="review-page review-stage">
     {top}
-    <div className="review-heading">
-      <div className="eyebrow">ONE LAST LOOK</div>
-      <h1>{r.missing.length ? 'Almost there.' : 'Your photos are in.'}</h1>
-      <p>{r.missing.length ? `Still needed: ${r.missing.join(', ')}.` : 'Check what we found, answer one quick question, and you’re done.'}</p>
-      {samples > 0 && <div className="sample-banner"><CircleAlert size={17} />{samples} {samples === 1 ? 'photo is a demo sample' : 'photos are demo samples'}. These don’t document your home.</div>}
-    </div>
-
-    {r.sections.map(s => <section key={s.id} className="review-section">
-      <h2>{s.title}{s.finding && <small>{s.finding}</small>}</h2>
-      <div className="review-items">{s.rows.map(row => {
-        const ph = p.photos[row.id];
-        if (row.state === 'skipped' || (row.id === 'fence' && p.fence !== 'yes')) return <p key={row.id} className="review-skipped"><Minus size={14} /> {row.title} · {row.state === 'skipped' ? 'not needed' : 'only if you have a fence'}</p>;
-        return <article key={row.id} className={`review-item ${row.state}`}>
-          <button className="review-thumb" onClick={() => p.onRetake(row.id)} aria-label={`${ph ? 'Retake' : 'Take'} ${row.title}`}>
-            {ph ? <img src={ph.url} alt="" /> : <Camera size={22} />}{ph?.source === 'sample' && <span className="sample-label">SAMPLE</span>}</button>
-          <div><h3>{row.title}</h3>
-            <p className={row.state === 'done' ? 'good' : 'needs'}>{row.state === 'done' ? <Check size={13} /> : <CircleAlert size={13} />} {row.state === 'done' ? (ph?.check?.override ? 'Sent for Base’s team to check' : row.note ?? 'Checked on this device') : row.state === 'retake' ? 'Retake suggested' : 'Not taken yet'}</p></div>
-          <button className="text-button" onClick={() => p.onRetake(row.id)}>{ph ? <><RotateCcw size={14} /> Retake</> : <><Camera size={14} /> Take photo</>}</button>
-        </article>;
-      })}</div>
-    </section>)}
-
-    <section className="review-section anything-else"><h2>A couple of questions</h2>
+    <div className="review-heading"><h1>A few questions.</h1></div>
+    <section className="review-section anything-else">
       <Choice label="Does your home have solar panels?" hint="Homes with solar need a 200 A panel." value={p.notes.solar} options={ANSWERS} onChange={v => p.onNotes({ ...p.notes, solar: v })} />
       <Choice label="Is there a fence along the meter wall?" value={p.fence} options={ANSWERS} onChange={p.onFence} />
       <Choice label="Where is your main breaker box?" value={p.location} options={LOCATIONS} onChange={p.onLocation} />
-      <label className="notes-label">Anything else Base should know? <span>Optional</span><textarea maxLength={1500} rows={3} value={p.notes.text} onChange={e => p.onNotes({ ...p.notes, text: e.target.value })} placeholder="Gate code, a dog in the yard, something you couldn’t safely photograph…" /></label>
+      <label className="notes-label">Anything else Base should know? <span>Optional</span><textarea maxLength={1500} rows={2} value={p.notes.text} onChange={e => p.onNotes({ ...p.notes, text: e.target.value })} placeholder="Gate code, a dog in the yard…" /></label>
     </section>
-
     <div className="review-finish"><div><CheckCircle2 size={20} /><p>Photos help Base review your home. They don’t approve an installation.</p></div>
       <button className="button primary" onClick={p.onFinish}>{r.ready ? 'Finish' : 'Finish for now'} <ArrowRight size={18} /></button></div>
+  </section>;
+
+  const rows = r.sections.flatMap(sec => sec.rows).filter(row => !(row.state === 'skipped' || (row.id === 'fence' && p.fence !== 'yes')));
+  return <section className="review-page review-stage">
+    {top}
+    <div className="review-heading">
+      <h1>{r.missing.length ? 'Almost there.' : 'Your photos are in.'}</h1>
+      <p>{r.missing.length ? `${r.missing.length} ${r.missing.length === 1 ? 'photo' : 'photos'} still needed. Tap one to take it.` : 'Tap any photo to retake it.'}</p>
+      {samples > 0 && <div className="sample-banner"><CircleAlert size={17} />{samples} {samples === 1 ? 'photo is a demo sample' : 'photos are demo samples'} — not your home.</div>}
+    </div>
+    <div className="review-tiles">{rows.map(row => {
+      const ph = p.photos[row.id];
+      const status = row.state === 'done' ? (ph?.check?.override ? 'Base will check' : 'Done') : row.state === 'retake' ? 'Retake?' : 'Needed';
+      return <button key={row.id} className={`review-tile ${row.state}`} onClick={() => p.onRetake(row.id)} aria-label={`${ph ? 'Retake' : 'Take'} ${row.title}: ${status}`} title={row.note}>
+        <span className="tile-img">{ph ? <img src={ph.url} alt="" /> : <Camera size={22} />}{ph?.source === 'sample' && <span className="sample-label">SAMPLE</span>}</span>
+        <span className="tile-text"><b>{row.title}</b><small>{row.state === 'done' ? <Check size={12} /> : <CircleAlert size={12} />} {status}</small></span>
+      </button>;
+    })}</div>
+    <div className="review-finish"><div><CheckCircle2 size={20} /><p>{r.missing.length ? 'You can finish now and add the rest later.' : 'Looks complete.'}</p></div>
+      <button className="button primary" onClick={() => { setStage('questions'); window.scrollTo({ top: 0, behavior: 'instant' }); }}>Next <ArrowRight size={18} /></button></div>
   </section>;
 }
