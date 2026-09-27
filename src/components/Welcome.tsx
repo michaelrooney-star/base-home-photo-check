@@ -3,8 +3,8 @@ export function Welcome({ onStart }: { onStart: () => void }) {
   return <div className="welcome-grid">
     <div className="welcome-copy">
       <div className="eyebrow"><span className="tiny-line" /> A LITTLE PREP. A BIG STEP FORWARD.</div>
-      <h1>Let’s photograph<br />your meter area<span className="red-dot">.</span></h1>
-      <p className="intro">These photos help the Base team review your home before installation.</p>
+      <h1>Find your spot<span className="red-dot">.</span></h1>
+      <p className="intro">A few guided photos of your meter area show Base the best place for your battery.</p>
       <div className="quick-facts"><span><Clock3 size={17} /> About 5–10 minutes</span><span><Camera size={17} /> 7–8 photos</span></div>
       <div className="prep-list">
         <div><span className="prep-icon"><Sun size={20} /></span><div><strong>A little daylight goes a long way</strong><p>Head outside while your meter area is well lit.</p></div></div>

@@ -14,7 +14,14 @@ export const SUBJECT_PROMPTS: Record<SubjectClass, string[]> = {
   ],
   gas_meter: ['a photo of a gas meter', 'a photo of a residential natural gas meter with pipes and a regulator'],
   water_meter: ['a photo of a water meter'],
-  breaker_panel: ['a photo of an electrical breaker panel', 'a photo of a circuit breaker box'],
+  // As many prompts as the electric meter: class probabilities are summed over prompts, so a class with fewer prompts
+  // loses close calls (a grey panel box was being called a meter).
+  breaker_panel: [
+    'a photo of an electrical breaker panel',
+    'a photo of a circuit breaker box',
+    'a photo of an open electrical panel with rows of circuit breaker switches',
+    'a photo of a gray metal breaker box with its door open',
+  ],
   other: ['a photo of a wall of a house', 'a photo of a room', 'a photo of a person', 'a photo of a yard', 'a photo of an air conditioner unit', 'a photo of a window'],
 };
 
