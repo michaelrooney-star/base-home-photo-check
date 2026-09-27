@@ -1,15 +1,95 @@
-import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, CircleAlert, FileCheck2, Leaf, LockKeyhole, Pencil, RotateCcw } from 'lucide-react';
-import { completion, requiredSteps, type Answer, type Notes, type PhotoId, type Photos } from '../lib/photos';
-import type { EstimateResult } from '../lib/estimate';
-import { OptionalEstimate } from './OptionalEstimate';
-const obstructions=['Nearby gas meter','AC unit','Window','Door','Vent','Wood pile','Bush','Other'];
-type Props={photos:Photos;fence:Answer;location:string;notes:Notes;estimate:EstimateResult|null;finished:boolean;onNotes:(n:Notes)=>void;onFence:(a:Answer)=>void;onLocation:(v:string)=>void;onEstimate:(e:EstimateResult|null)=>void;onRetake:(id:PhotoId)=>void;onMark:(id:PhotoId,status:'confirmed'|'retake')=>void;onFinish:()=>void;onEdit:()=>void;onBack:()=>void};
-export function Review(p:Props){
-  const tally=completion(p.photos,p.fence,p.location);const steps=requiredSteps(p.fence);const samples=steps.filter(s=>p.photos[s.id]?.source==='sample').length;
-  return <section className="review-page"><div className="capture-topbar"><button className="text-button" onClick={p.onBack}><ArrowLeft size={16}/> Back to photos</button><span className="small-private"><LockKeyhole size={13}/> Nothing is uploaded</span></div><div className={`review-heading ${p.finished?'finished-heading':''}`}>{p.finished&&<span className={`result-icon ${tally.ready?'':'incomplete'}`}>{tally.ready?<CheckCircle2 size={32}/>:<Camera size={32}/>}</span>}<div className="eyebrow">{p.finished?'YOUR PHOTO CHECK':'ONE LAST LOOK'}</div><h1>{p.finished?(tally.ready?'Ready for Base team review.':'A few more photos would help.'):'Looking good. Let’s review.'}</h1><p>{p.finished?'This pre-screen does not determine eligibility or approve an installation. Base’s team confirms site fit and requirements.':'Take a moment to check each photo. Clear details help the Base team understand your space.'}</p>{samples>0&&<div className="sample-banner"><CircleAlert size={17}/>{samples} {samples===1?'photo is a demo sample':'photos are demo samples'}. These don’t document your home.</div>}{p.finished&&<p className="local-result-note">Demo summary only. These photos have not been sent to Base. Keep this page open to keep your session.</p>}</div>
-    <div className="review-count"><h2>Your photos</h2><span><b>{tally.complete} of {tally.total}</b> complete</span></div><div className="review-grid">{steps.map((s,i)=>{const photo=p.photos[s.id];return <article className="review-photo" key={s.id}><div className="review-thumbnail">{photo?<img src={photo.url} alt={`${s.title}${photo.source==='sample'?' — Base guide sample':''}`}/>:<Camera size={30}/>}<span className="thumbnail-index">{String(i+1).padStart(2,'0')}</span>{photo?.source==='sample'&&<span className="sample-label">SAMPLE</span>}<button className="thumbnail-retake" aria-label={`${photo?'Retake':'Add'} ${s.title}`} onClick={()=>p.onRetake(s.id)}>{photo?<RotateCcw size={15}/>:<Camera size={15}/>}</button></div><div className="review-photo-info"><h3>{s.title}</h3><span className={`photo-status ${photo?.status==='confirmed'?'good':'needs-photo'}`}>{photo?.status==='confirmed'?<Check size={13}/>:<CircleAlert size={13}/>} {!photo?'Missing':photo.status==='retake'?'Retake suggested':'Complete · manually checked'}</span>{photo&&<div className="review-photo-actions"><button onClick={()=>p.onMark(s.id,'confirmed')} className={photo.status==='confirmed'?'selected':''}>I can read this</button><button onClick={()=>p.onMark(s.id,'retake')}>Flag for retake</button></div>}</div></article>})}</div>
-    <div className="review-details"><section className="site-notes"><div className="card-heading"><span className="optional-icon"><Leaf size={21}/></span><div><h2>A little more about your home</h2><p>Homeowner observations · not verified by Base</p></div></div><fieldset><legend>Does a fence run along the meter wall?</legend><div className="segment-group">{(['yes','no','unsure'] as const).map(v=><button key={v} aria-pressed={p.fence===v} onClick={()=>p.onFence(v)}>{v==='unsure'?'Not sure':v==='yes'?'Yes':'No'}</button>)}</div>{(p.fence===null||p.fence==='unsure')&&<p className="field-help">Confirm this when you can. Base can help if you’re not sure.</p>}</fieldset><label className="review-location">Main breaker location<select value={p.location} onChange={e=>p.onLocation(e.target.value)}><option value="">Choose a location</option><option value="outside">Outside</option><option value="garage">Garage</option><option value="closet">Closet</option><option value="not sure">Not sure</option></select></label><fieldset><legend>Does your home have solar panels? <span>Optional</span></legend><div className="segment-group">{(['yes','no','unsure'] as const).map(v=><button key={v} aria-pressed={p.notes.solar===v} onClick={()=>p.onNotes({...p.notes,solar:v})}>{v==='unsure'?'Not sure':v==='yes'?'Yes':'No'}</button>)}</div></fieldset><fieldset><legend>What’s near the meter? <span>Optional</span></legend><div className="obstruction-chips">{obstructions.map(o=><label key={o}><input type="checkbox" checked={p.notes.obstructions.includes(o)} onChange={e=>p.onNotes({...p.notes,obstructions:e.target.checked?[...p.notes.obstructions,o]:p.notes.obstructions.filter(v=>v!==o)})}/><span>{o}</span></label>)}</div></fieldset><label className="notes-label">Anything else we should know? <span>Optional</span><textarea maxLength={1500} rows={3} value={p.notes.text} onChange={e=>p.onNotes({...p.notes,text:e.target.value})} placeholder="Access details, something you couldn’t safely photograph…"/></label></section><OptionalEstimate key={Object.values(p.photos).map(photo=>photo?.url).join('|')} photos={p.photos} result={p.estimate} onResult={p.onEstimate}/></div>
-    {p.finished&&<div className="session-summary"><h2>Your observations</h2><p><strong>Fence:</strong> {p.fence??'Not answered'} <span>·</span> <strong>Solar:</strong> {p.notes.solar??'Not answered'} <span>·</span> <strong>Breaker:</strong> {p.location||'Not answered'}</p><p><strong>Nearby:</strong> {p.notes.obstructions.join(', ')||'No observations selected'}</p>{p.notes.text&&<p className="note-summary">{p.notes.text}</p>}{p.estimate&&<p><strong>Approximate photo estimate:</strong> {p.estimate.distance.toFixed(1)} {p.estimate.unit}{p.estimate.corrected?' · manually corrected':''}{p.estimate.sample?' · sample photo':''}. Separate from the photo checklist; Base team review needed.</p>}</div>}
-    <div className="review-finish"><div><FileCheck2 size={20}/><p>{p.finished?'Your session stays here, on this device.':'Photos help Base review your home. They don’t approve an installation.'}</p></div><button className="button primary" onClick={p.finished?p.onEdit:p.onFinish}>{p.finished?<><Pencil size={17}/> Keep editing</>:<>Finish photo check <ArrowRight size={18}/></>}</button></div>
+import { useState } from 'react';
+import { ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, CircleAlert, Download, LockKeyhole, Minus, Pencil, RotateCcw } from 'lucide-react';
+import { buildReport, reportText, type Report } from '../lib/report';
+import type { Answer, Notes, PhotoId, Photos } from '../lib/photos';
+
+type Props = { photos: Photos; fence: Answer; location: string; notes: Notes; finished: boolean; onNotes: (n: Notes) => void; onFence: (a: Answer) => void; onLocation: (v: string) => void; onRetake: (id: PhotoId) => void; onFinish: () => void; onEdit: () => void; onBack: () => void };
+const ANSWERS = [['yes', 'Yes'], ['no', 'No'], ['unsure', 'Not sure']] as const;
+const LOCATIONS = [['outside', 'Outside'], ['garage', 'Garage'], ['closet', 'Closet'], ['not sure', 'Not sure']] as const;
+
+function Choice<T extends string>({ label, value, options, onChange, hint }: { label: string; value: T | null | ''; options: readonly (readonly [T, string])[]; onChange: (v: T) => void; hint?: string }) {
+  return <fieldset className="review-question"><legend>{label}{hint && <small>{hint}</small>}</legend>
+    <div className="choice-chips">{options.map(([v, t]) => <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(v)}>{t}</button>)}</div></fieldset>;
+}
+
+/** Photos as JPEG data URLs (≤1600 px), for the downloadable report. */
+async function photoData(url: string) {
+  const img = new Image(); img.src = url; await img.decode();
+  const s = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+async function download(r: Report, photos: Photos) {
+  const rows = r.sections.flatMap(s => s.rows).filter(row => photos[row.id]);
+  const files = await Promise.all(rows.map(async row => ({ step: row.id, title: row.title, source: photos[row.id]!.source, check: photos[row.id]!.check ?? null, image: await photoData(photos[row.id]!.url) })));
+  const blob = new Blob([JSON.stringify({ generatedAt: new Date().toISOString(), summary: reportText(r), findings: r.findings, missing: r.missing, reviewerNotes: r.reviewerNotes, photos: files }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'base-photo-check.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+export function Review(p: Props) {
+  const r = buildReport(p.photos, p.fence, p.location, p.notes);
+  const [saving, setSaving] = useState(false);
+  const samples = Object.values(p.photos).filter(ph => ph?.source === 'sample').length;
+  const top = <div className="capture-topbar"><button className="text-button" onClick={p.finished ? p.onEdit : p.onBack}><ArrowLeft size={16} /> {p.finished ? 'Back to review' : 'Back to photos'}</button><span className="small-private"><LockKeyhole size={13} /> Nothing is uploaded</span></div>;
+
+  if (p.finished) return <section className="review-page">
+    {top}
+    <div className="review-heading finished-heading">
+      <span className={`result-icon ${r.ready ? '' : 'incomplete'}`}>{r.ready ? <CheckCircle2 size={32} /> : <Camera size={32} />}</span>
+      <div className="eyebrow">YOUR PHOTO CHECK</div>
+      <h1>{r.ready ? 'Ready for Base’s team.' : 'A few things are still missing.'}</h1>
+      <p>{r.ready ? 'Here’s what happens next.' : `Still needed: ${[...r.missing, ...r.findings.filter(f => f.missing && ['Solar panels', 'Fence along the meter wall', 'Breaker box location'].includes(f.label)).map(f => f.label.toLowerCase())].join(', ')}.`}</p>
+    </div>
+    <ol className="next-steps">
+      <li><b>Base’s team reviews your photos</b><span>They confirm where the battery can go, using what your photos show.</span></li>
+      <li><b>They check your electrical panel</b><span>{r.findings.find(f => f.label === 'Main breaker')?.missing ? 'Your main breaker’s rating tells them which setup your panel supports.' : `Your main breaker reads ${r.findings.find(f => f.label === 'Main breaker')!.value}; they confirm which setup it supports.`}</span></li>
+      <li><b>Base contacts you about installation</b><span>If anything is unclear, they’ll ask — you don’t need to retake anything unless they do.</span></li>
+    </ol>
+    <section className="report-card"><h2>What we’ll send to Base</h2>
+      <dl>{r.findings.map(f => <div key={f.label} className={f.missing ? 'missing' : ''}><dt>{f.label}</dt><dd>{f.value}</dd></div>)}</dl>
+      {r.reviewerNotes.length > 0 && <details><summary>Notes for Base’s reviewers ({r.reviewerNotes.length})</summary><ul>{r.reviewerNotes.map(n => <li key={n}>{n}</li>)}</ul></details>}
+      <p className="local-result-note">Demo only: nothing has been sent. Download the summary to see what Base would receive.</p>
+      <div className="confirm-actions">
+        <button className="button" onClick={p.onEdit}><Pencil size={16} /> Keep editing</button>
+        <button className="button primary" disabled={saving} onClick={async () => { setSaving(true); try { await download(r, p.photos); } finally { setSaving(false); } }}><Download size={16} /> {saving ? 'Preparing…' : 'Download summary'}</button>
+      </div>
+    </section>
+  </section>;
+
+  return <section className="review-page">
+    {top}
+    <div className="review-heading">
+      <div className="eyebrow">ONE LAST LOOK</div>
+      <h1>{r.missing.length ? 'Almost there.' : 'Your photos are in.'}</h1>
+      <p>{r.missing.length ? `Still needed: ${r.missing.join(', ')}.` : 'Check what we found, answer one quick question, and you’re done.'}</p>
+      {samples > 0 && <div className="sample-banner"><CircleAlert size={17} />{samples} {samples === 1 ? 'photo is a demo sample' : 'photos are demo samples'}. These don’t document your home.</div>}
+    </div>
+
+    {r.sections.map(s => <section key={s.id} className="review-section">
+      <h2>{s.title}{s.finding && <small>{s.finding}</small>}</h2>
+      <div className="review-items">{s.rows.map(row => {
+        const ph = p.photos[row.id];
+        if (row.state === 'skipped' || (row.id === 'fence' && p.fence !== 'yes')) return <p key={row.id} className="review-skipped"><Minus size={14} /> {row.title} · {row.state === 'skipped' ? 'not needed' : 'only if you have a fence'}</p>;
+        return <article key={row.id} className={`review-item ${row.state}`}>
+          <button className="review-thumb" onClick={() => p.onRetake(row.id)} aria-label={`${ph ? 'Retake' : 'Take'} ${row.title}`}>
+            {ph ? <img src={ph.url} alt="" /> : <Camera size={22} />}{ph?.source === 'sample' && <span className="sample-label">SAMPLE</span>}</button>
+          <div><h3>{row.title}</h3>
+            <p className={row.state === 'done' ? 'good' : 'needs'}>{row.state === 'done' ? <Check size={13} /> : <CircleAlert size={13} />} {row.state === 'done' ? (ph?.check?.override ? 'Sent for Base’s team to check' : row.note ?? 'Checked on this device') : row.state === 'retake' ? 'Retake suggested' : 'Not taken yet'}</p></div>
+          <button className="text-button" onClick={() => p.onRetake(row.id)}>{ph ? <><RotateCcw size={14} /> Retake</> : <><Camera size={14} /> Take photo</>}</button>
+        </article>;
+      })}</div>
+    </section>)}
+
+    <section className="review-section anything-else"><h2>A couple of questions</h2>
+      <Choice label="Does your home have solar panels?" hint="Homes with solar need a 200 A panel." value={p.notes.solar} options={ANSWERS} onChange={v => p.onNotes({ ...p.notes, solar: v })} />
+      <Choice label="Is there a fence along the meter wall?" value={p.fence} options={ANSWERS} onChange={p.onFence} />
+      <Choice label="Where is your main breaker box?" value={p.location} options={LOCATIONS} onChange={p.onLocation} />
+      <label className="notes-label">Anything else Base should know? <span>Optional</span><textarea maxLength={1500} rows={3} value={p.notes.text} onChange={e => p.onNotes({ ...p.notes, text: e.target.value })} placeholder="Gate code, a dog in the yard, something you couldn’t safely photograph…" /></label>
+    </section>
+
+    <div className="review-finish"><div><CheckCircle2 size={20} /><p>Photos help Base review your home. They don’t approve an installation.</p></div>
+      <button className="button primary" onClick={p.onFinish}>{r.ready ? 'Finish' : 'Finish for now'} <ArrowRight size={18} /></button></div>
   </section>;
 }

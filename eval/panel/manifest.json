@@ -1,0 +1,7 @@
+[
+ {"file": "rating_close_a.png", "amps": 200, "note": "Close-up of a Square D handle (from Base's guide)"},
+ {"file": "rating_close_c.png", "amps": 200, "note": "Close-up of a handle stamped sideways (from Base's guide)"},
+ {"file": "rating_a.png", "amps": null, "note": "Whole disconnect from too far away: number too small to read"},
+ {"file": "rating_c.png", "amps": null, "note": "Whole disconnect from too far away"},
+ {"file": "breaker.png", "amps": null, "note": "Breaker panel, not a rating close-up"}
+]

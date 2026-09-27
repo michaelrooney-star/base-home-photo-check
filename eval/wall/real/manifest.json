@@ -1,0 +1,99 @@
+[
+ {
+  "file": "hunter_controller.jpg",
+  "step": "not_meter",
+  "note": "Irrigation controller (Hunter), not a meter",
+  "size": [
+   1512,
+   2016
+  ]
+ },
+ {
+  "file": "205_wall_medium.jpg",
+  "step": "wall",
+  "note": "Straight-on meter wall: disconnect box left, large cabinet right, window above",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": false
+ },
+ {
+  "file": "205_meter_closeup.jpg",
+  "step": "meter",
+  "note": "Meter number close-up",
+  "size": [
+   2016,
+   1512
+  ]
+ },
+ {
+  "file": "205_left_wide.jpg",
+  "step": "left",
+  "note": "Looking along the wall to the left of the meter: two disconnect boxes, window above",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": false
+ },
+ {
+  "file": "205_right.jpg",
+  "step": "right",
+  "note": "Meter at left edge; large cabinet fills the area to the right",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": false
+ },
+ {
+  "file": "205_wall_wide_ac.jpg",
+  "step": "wall",
+  "note": "Whole wall: AC unit left, conduit on the ground, cabinet right",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": true
+ },
+ {
+  "file": "203_meter_closeup.jpg",
+  "step": "meter",
+  "note": "Meter number close-up (graffiti)",
+  "size": [
+   2016,
+   1512
+  ]
+ },
+ {
+  "file": "203_wall_medium.jpg",
+  "step": "wall",
+  "note": "Straight-on: disconnect left, bushes right, ground covered by plants",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": true
+ },
+ {
+  "file": "203_left_wide.jpg",
+  "step": "left",
+  "note": "Left of meter: two more boxes and a door/window",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": true
+ },
+ {
+  "file": "203_right.jpg",
+  "step": "right",
+  "note": "Right of meter: dense bushes",
+  "size": [
+   2016,
+   1512
+  ],
+  "ground": true
+ }
+]

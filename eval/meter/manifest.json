@@ -1,0 +1,107 @@
+{
+  "bad_blur.jpg": {
+    "expect": "retake",
+    "why": "heavy blur"
+  },
+  "bad_cutoff.jpg": {
+    "expect": "retake",
+    "why": "number cropped at the bottom edge"
+  },
+  "bad_dark.jpg": {
+    "expect": "retake",
+    "why": "underexposed"
+  },
+  "bad_glare.jpg": {
+    "expect": "retake",
+    "why": "specular glare over number"
+  },
+  "bad_last_digits_hidden.jpg": {
+    "expect": "retake",
+    "why": "last digits covered: must not pass a truncated number"
+  },
+  "bad_obstructed.jpg": {
+    "expect": "retake",
+    "why": "leaf/hand-sized block over first digits"
+  },
+  "bad_too_far.jpg": {
+    "expect": "retake",
+    "why": "meter tiny in frame"
+  },
+  "bad_wall_shot.jpg": {
+    "expect": "retake",
+    "why": "wide wall shot; meter number unreadable"
+  },
+  "good_blurry_but_legible.jpg": {
+    "expect": "pass",
+    "number": "149 214 094",
+    "why": "noticeably soft, but every digit is still legible to a person; accepted because the number is read confidently"
+  },
+  "good_crop.jpg": {
+    "expect": "pass",
+    "why": "tight crop on nameplate",
+    "number": "149 214 094"
+  },
+  "good_dim.jpg": {
+    "expect": "pass",
+    "why": "overcast / dim",
+    "number": "149 214 094"
+  },
+  "good_lcd_reading.jpg": {
+    "expect": "pass",
+    "number": "149 214 094",
+    "why": "LCD shows a big kWh reading; must still read the nameplate number, not the display"
+  },
+  "good_original.jpg": {
+    "expect": "pass",
+    "why": "Base guide sample",
+    "number": "149 214 094"
+  },
+  "good_perspective.jpg": {
+    "expect": "pass",
+    "why": "mild perspective",
+    "number": "149 214 094"
+  },
+  "good_rotated.jpg": {
+    "expect": "pass",
+    "why": "slight tilt, still readable",
+    "number": "149 214 094"
+  },
+  "good_small_lowq.jpg": {
+    "expect": "pass",
+    "why": "downscaled, heavy JPEG compression",
+    "number": "149 214 094"
+  },
+  "good_soft_focus.jpg": {
+    "expect": "pass",
+    "why": "slight softness",
+    "number": "149 214 094"
+  },
+  "not_meter_breaker.jpg": {
+    "expect": "not_meter",
+    "why": "breaker panel, not a meter"
+  },
+  "not_meter_rating.jpg": {
+    "expect": "not_meter",
+    "why": "main disconnect rating, not a meter"
+  },
+  "real_205_austin.jpg": {
+    "expect": "pass",
+    "number": "AE 6106892",
+    "why": "real Austin Energy meter (iPhone photo); number has an \"AE\" prefix and other numbers share the plate"
+  },
+  "real_205_austin_circle.jpg": {
+    "expect": "pass",
+    "number": "AE 6106892",
+    "why": "same meter cropped to the guide circle, as the app captures it"
+  },
+  "real_203_austin.jpg": {
+    "expect": "pass",
+    "number": "AE 6136370",
+    "why": "real Austin Energy meter (iPhone photo); number has an \"AE\" prefix and other numbers share the plate"
+  },
+  "real_203_austin_circle.jpg": {
+    "expect": "pass",
+    "number": "AE 6136370",
+    "why": "same meter cropped to the guide circle, as the app captures it"
+  }
+}
